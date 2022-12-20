@@ -1,0 +1,172 @@
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"io/ioutil"
+	"log"
+	"math/rand"
+	"net"
+	"net/http"
+	"net/http/httputil"
+	"os"
+	"os/signal"
+	"seo/mirror/db"
+	"strings"
+	"sync"
+	"syscall"
+	"time"
+
+	"golang.org/x/net/netutil"
+)
+
+type AppConfig struct {
+	Port          string              `json:"port"`
+	CachePath     string              `json:"cache_path"`
+	Spider        []string            `json:"spider"`
+	GoodSpider    []string            `json:"good_spider"`
+	AdminUri      string              `json:"admin_uri"`
+	UserAgent     string              `json:"user_agent"`
+	GlobalReplace []map[string]string `json:"global_replace"`
+	Keywords      []string
+	InjectJs      string
+	FriendLinks   map[string][]string
+}
+type App struct {
+	*AppConfig
+	Dao *db.SiteConfigDao
+	*http.Server
+	Sites sync.Map
+}
+type Site struct {
+	*db.SiteConfig
+	*httputil.ReverseProxy
+}
+
+func init() {
+	rand.Seed(time.Now().UnixNano())
+	err := db.InitTable()
+	if err != nil {
+		log.Fatal("init table error", err.Error())
+	}
+}
+
+func main() {
+	appConfig, err := ParseAppConfig()
+	if err != nil {
+		log.Fatal("parse config error", err.Error())
+	}
+	app := App{
+		AppConfig: &appConfig,
+		Dao:       new(db.SiteConfigDao),
+	}
+	app.Start()
+	// 捕获kill的信号
+	sigTERM := make(chan os.Signal)
+	signal.Notify(sigTERM, syscall.SIGTERM)
+	// 收到信号前会一直阻塞
+	<-sigTERM
+	app.Stop()
+}
+func (app *App) Start() {
+	l, err := net.Listen("tcp", ":"+app.Port)
+	if err != nil {
+		log.Fatalln(err.Error())
+	}
+	l = netutil.LimitListener(l, 256*2048)
+	app.Server = &http.Server{Handler: app}
+	go func() {
+		if err := app.Serve(l); err != nil {
+			log.Fatalln("监听错误" + err.Error())
+		}
+	}()
+
+}
+func (app *App) Stop() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	err := app.Shutdown(ctx)
+	if err != nil {
+		log.Println("shutdown error" + err.Error())
+	}
+	defer cancel()
+}
+func (app *App) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
+
+	// if authErr := m.auth(); authErr != nil {
+	// 	_, _ = writer.Write([]byte(authErr.Error()))
+	// 	return
+	// }
+	if request.URL.Path == "/abcd/abcd.js" {
+		writer.Write([]byte(app.InjectJs))
+		return
+	}
+	host := getHost(request)
+	item, ok := app.Sites.Load(host)
+	if !ok {
+		_, _ = writer.Write([]byte("未找到该代理域名，请检查配置 " + host))
+		return
+	}
+	site := item.(*Site)
+	site.ServeHTTP(writer, request)
+
+}
+
+func singleJoiningSlash(a, b string) string {
+	asLash := strings.HasSuffix(a, "/")
+	bsLash := strings.HasPrefix(b, "/")
+	switch {
+	case asLash && bsLash:
+		return a + b[1:]
+	case !asLash && !bsLash:
+		return a + "/" + b
+	}
+	return a + b
+}
+
+func getHost(request *http.Request) string {
+	host := request.Host
+	if host == "" {
+		host = request.Header.Get("Host")
+	}
+	if strings.Index(host, ":") != -1 {
+		host, _, _ = net.SplitHostPort(host)
+	}
+	return host
+}
+func ParseAppConfig() (AppConfig, error) {
+	var appConfig AppConfig
+	data, err := ioutil.ReadFile("config.json")
+	if err != nil {
+		return appConfig, err
+	}
+
+	err = json.Unmarshal(data, &appConfig)
+	if err != nil {
+		return appConfig, err
+	}
+	//关键字文件
+	keywordData, err := ioutil.ReadFile("config/keywords.txt")
+	if err == nil && len(keywordData) > 0 {
+		keywordStr := strings.Replace(string(keywordData), "\r", "", -1)
+		appConfig.Keywords = strings.Split(keywordStr, "\n")
+	}
+	//统计js
+	js, err := ioutil.ReadFile("config/inject.js")
+	if err == nil {
+		appConfig.InjectJs = string(js)
+	}
+	//友情链接文本
+	linkData, err := ioutil.ReadFile("config/links.txt")
+	if err == nil && len(linkData) > 0 {
+		linkLines := strings.Split(strings.Replace(string(linkData), "\r", "", -1), "\n")
+		for _, line := range linkLines {
+			linkArr := strings.Split(line, "||")
+			if len(linkArr) < 2 {
+				continue
+			}
+			appConfig.FriendLinks[linkArr[0]] = linkArr[1:]
+		}
+	}
+
+	return appConfig, nil
+}
