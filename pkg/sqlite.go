@@ -10,22 +10,23 @@ import (
 )
 
 type SiteConfig struct {
-	Id               int      `json:"id"`
-	Domain           string   `json:"domain"`
-	Url              string   `json:"url"`
-	IndexTitle       string   `json:"index_title"`
-	IndexKeywords    string   `json:"index_keywords"`
-	IndexDescription string   `json:"index_description"`
-	Finds            []string `json:"finds"`
-	Replaces         []string `json:"replaces"`
-	NeedJs           bool     `json:"need_js"`
-	S2t              bool     `json:"s2t"`
-	TitleReplace     bool     `json:"title_replace"`
-	H1Replace        string   `json:"h1replace"`
-	CacheTime        int64    `json:"cache_time"`
-	CacheEnable      bool     `json:"cache_enable"`
-	BaiduPushKey     string   `json:"baidu_push_key"`
-	SmPushKey        string   `json:"sm_push_key"`
+	Id                  int      `json:"id"`
+	Domain              string   `json:"domain"`
+	Url                 string   `json:"url"`
+	IndexTitle          string   `json:"index_title"`
+	IndexKeywords       string   `json:"index_keywords"`
+	IndexDescription    string   `json:"index_description"`
+	Finds               []string `json:"finds"`
+	Replaces            []string `json:"replaces"`
+	TraditionalReplaces []string `json:"traditional_replaces"`
+	NeedJs              bool     `json:"need_js"`
+	S2t                 bool     `json:"s2t"`
+	TitleReplace        bool     `json:"title_replace"`
+	H1Replace           string   `json:"h1replace"`
+	CacheTime           int64    `json:"cache_time"`
+	CacheEnable         bool     `json:"cache_enable"`
+	BaiduPushKey        string   `json:"baidu_push_key"`
+	SmPushKey           string   `json:"sm_push_key"`
 }
 
 type SiteConfigDao struct {

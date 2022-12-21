@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/sgoby/opencc"
 	"golang.org/x/net/netutil"
 )
 
@@ -31,6 +32,7 @@ type App struct {
 	Dao *SiteConfigDao
 	*http.Server
 	Sites sync.Map
+	S2T   *opencc.OpenCC
 }
 
 func (app *App) Start() {
