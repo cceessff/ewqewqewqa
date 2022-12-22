@@ -8,6 +8,8 @@ import (
 	"seo/mirror/pkg"
 	"syscall"
 	"time"
+
+	"github.com/sgoby/opencc"
 )
 
 func init() {
@@ -23,9 +25,15 @@ func main() {
 	if err != nil {
 		log.Fatal("parse config error", err.Error())
 	}
+	//繁体
+	s2t, err := opencc.NewOpenCC("s2t")
+	if err != nil {
+		log.Fatal("转繁体功能错误" + err.Error())
+	}
 	app := pkg.App{
 		AppConfig: &appConfig,
 		Dao:       new(pkg.SiteConfigDao),
+		S2T:       s2t,
 	}
 	app.Start()
 	// 捕获kill的信号

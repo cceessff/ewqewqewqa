@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"math/rand"
 	"net/http"
 	"net/http/httputil"
@@ -19,6 +20,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"golang.org/x/net/html"
 )
@@ -38,6 +40,48 @@ type CustomResponse struct {
 	Header http.Header
 }
 
+func (site *Site) Route(writer http.ResponseWriter, request *http.Request) {
+	ua := request.UserAgent()
+	request.Header.Set("Origin-Ua", ua)
+	if site.isCrawler(ua) && !site.isGoodCrawler(ua) { //如果是蜘蛛但不是好蜘蛛
+		writer.WriteHeader(404)
+		_, _ = writer.Write([]byte("页面未找到"))
+		return
+	}
+
+	//site.DecodeUrl(request.URL)
+	cacheKey := site.Domain + request.URL.Path + request.URL.RawQuery
+	if site.CacheEnable {
+		if cacheResponse := site.getCache(cacheKey, false); cacheResponse != nil {
+			for key, values := range cacheResponse.Header {
+				writer.Header()[key] = values
+			}
+			var content = cacheResponse.Body
+
+			if strings.Contains(strings.ToLower(cacheResponse.Header.Get("Content-Type")), "html") {
+				content = site.injectJs(content, isIndexPage(request.URL), site.isCrawler(ua))
+			}
+			contentLength := int64(len(content))
+			writer.Header().Set("Content-Length", strconv.FormatInt(contentLength, 10))
+			if cacheResponse.StatusCode != 0 {
+				writer.WriteHeader(cacheResponse.StatusCode)
+			} else {
+				writer.WriteHeader(200)
+			}
+			_, err := writer.Write(content)
+			if err != nil {
+				log.Println("写出错误：", err.Error(), request.URL)
+			}
+			return
+		}
+
+	}
+	if site.app.UserAgent != "" {
+		request.Header.Set("User-Agent", site.app.UserAgent)
+	}
+	site.ServeHTTP(writer, request)
+
+}
 func (site *Site) ModifyResponse(response *http.Response) error {
 
 	if response.StatusCode == 301 || response.StatusCode == 302 {
@@ -51,38 +95,34 @@ func (site *Site) ModifyResponse(response *http.Response) error {
 		}
 		contentType := strings.ToLower(response.Header.Get("Content-Type"))
 
-		if strings.Index(contentType, "text/html") != -1 {
+		if strings.Contains(contentType, "text/html") {
 			return site.handleHtmlResponse(content, response, contentType)
 
-		} else if strings.Index(contentType, "css") != -1 || strings.Index(contentType, "javascript") != -1 {
-			var contentStr = site.GBk2UTF8(content, contentType)
-			u, _ := url.Parse(siteConf.Url)
-			contentStr = strings.Replace(contentStr, u.Host, siteConf.Domain, -1)
-			response.Request.URL.Host = siteConf.Domain
-
-			if site.schema == "https" {
+		} else if strings.Contains(contentType, "css") || strings.Contains(contentType, "javascript") {
+			var contentStr = GBk2UTF8(content, contentType)
+			u, _ := url.Parse(site.Url)
+			contentStr = strings.Replace(contentStr, u.Host, site.Domain, -1)
+			if site.Schema == "https" {
 				contentStr = strings.Replace(contentStr, "http:", "https:", -1)
 			} else {
 				contentStr = strings.Replace(contentStr, "https:", "http:", -1)
 			}
-			myResponse := site.ToResponse(response, []byte(contentStr))
-			site.setCache(cacheKey, myResponse)
-			site.changeResponseBody(response, []byte(contentStr))
+
+			site.setCache(cacheKey, response, []byte(contentStr))
+			site.wrapResponseBody(response, []byte(contentStr))
 			return nil
 
 		} else {
-			myResponse := site.ToResponse(response, content)
-			site.setCache(cacheKey, myResponse)
-			site.changeResponseBody(response, content)
+			site.setCache(cacheKey, response, content)
+			site.wrapResponseBody(response, content)
 			return nil
 		}
 	}
 
 	if response.StatusCode > 400 && response.StatusCode < 500 {
 		content := []byte("访问的页面不存在")
-		myResponse := site.ToResponse(response, content)
-		site.setCache(cacheKey, myResponse)
-		site.changeResponseBody(response, content)
+		site.setCache(cacheKey, response, content)
+		site.wrapResponseBody(response, content)
 	}
 	return nil
 }
@@ -189,7 +229,8 @@ func (site *Site) handleHtmlResponse(content []byte, response *http.Response, co
 	cacheKey := site.Domain + response.Request.URL.Path + response.Request.URL.RawQuery
 	site.setCache(cacheKey, response, []byte(contentStr))
 	content = site.injectJs([]byte(contentStr), isIndexPage, site.isCrawler(response.Request.Header.Get("Origin-Ua")))
-	site.changeResponseBody(response, content)
+	site.wrapResponseBody(response, content)
+	return nil
 
 }
 func (site *Site) handleHtmlContent(content []byte, contentType string, isIndexPage bool) string {
@@ -280,7 +321,6 @@ func (site *Site) DecodeUrl(u *url.URL) {
 func (site *Site) htmlEntities(input string) string {
 	runes := []rune(input)
 	var buffer bytes.Buffer
-
 	for _, r := range runes {
 		inputUnicode := strconv.QuoteToASCII(string(r))
 		if strings.Contains(inputUnicode, "\\u") {
@@ -371,6 +411,33 @@ func (site *Site) setCache(url string, response *http.Response, content []byte) 
 	}
 	return nil
 }
+func (site *Site) getCache(requestUrl string, force bool) *CustomResponse {
+	sum := sha1.Sum([]byte(requestUrl))
+	hash := hex.EncodeToString(sum[:])
+	dir := path.Join(site.CachePath+"/"+site.Domain, hash[:5])
+	filename := path.Join(dir, hash)
+	fileInfo, err := os.Stat(filename)
+	if err != nil {
+		return nil
+	}
+	if !force {
+		modTime := fileInfo.ModTime()
+		expireTime := modTime.Unix() + site.CacheTime*60
+		nowTime := time.Now().Unix()
+		if nowTime > expireTime {
+			return nil
+		}
+	}
+
+	if file, err := os.Open(filename); err == nil {
+		resp := new(CustomResponse)
+		gob.NewDecoder(file).Decode(resp)
+		file.Close()
+		return resp
+	}
+	return nil
+}
+
 func isExist(path string) bool {
 	_, err := os.Stat(path) //os.Stat获取文件信息
 	if err != nil {
@@ -431,4 +498,11 @@ func (site *Site) isGoodCrawler(ua string) bool {
 		}
 	}
 	return false
+}
+func (site *Site) wrapResponseBody(response *http.Response, content []byte) {
+	readAndCloser := ioutil.NopCloser(bytes.NewReader(content))
+	contentLength := int64(len(content))
+	response.Body = readAndCloser
+	response.ContentLength = contentLength
+	response.Header.Set("Content-Length", strconv.FormatInt(contentLength, 10))
 }
