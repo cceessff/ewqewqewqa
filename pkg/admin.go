@@ -16,13 +16,12 @@ import (
 )
 
 type AdminModule struct {
-	dao        *SiteConfigDao
-	app        *App
-	fileHandle http.Handler
-	adminMux   *http.ServeMux
-	UserName   string
-	Password   string
-	prefix     string
+	dao      *SiteConfigDao
+	app      *App
+	adminMux *http.ServeMux
+	UserName string
+	Password string
+	prefix   string
 }
 
 func newAdmin(dao *SiteConfigDao, app *App) *AdminModule {
@@ -52,9 +51,9 @@ func (admin *AdminModule) Initialize() {
 }
 
 func (admin *AdminModule) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-
+	cookie, _ := r.Cookie("login_cert")
 	if r.URL.Path != admin.prefix+"/login" {
-		cookie, _ := r.Cookie("login_cert")
+
 		if cookie == nil || cookie.Value == "" {
 			http.Redirect(w, r, admin.prefix+"/login", http.StatusMovedPermanently)
 			return
@@ -66,11 +65,11 @@ func (admin *AdminModule) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else {
-		loginCookie, _ := r.Cookie("login_cert")
-		if loginCookie != nil && loginCookie.Value != "" {
+
+		if cookie != nil && cookie.Value != "" {
 			sum := sha256.New().Sum([]byte(admin.UserName + admin.Password))
 			loginSign := fmt.Sprintf("%x", sum)
-			if loginCookie.Value == loginSign {
+			if cookie.Value == loginSign {
 				http.Redirect(w, r, admin.prefix, http.StatusMovedPermanently)
 				return
 			}
@@ -78,7 +77,6 @@ func (admin *AdminModule) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	}
 	admin.adminMux.ServeHTTP(w, r)
-
 }
 
 func (admin *AdminModule) login(writer http.ResponseWriter, request *http.Request) {
@@ -356,7 +354,11 @@ func (admin *AdminModule) ConfigSave(writer http.ResponseWriter, request *http.R
 		_, _ = writer.Write([]byte(`{"code":1,"msg":` + err.Error() + `}`))
 		return
 	}
-	site := admin.app.NewSite(siteConfig)
+	site, err := admin.app.newSite(&siteConfig)
+	if err != nil {
+		_, _ = writer.Write([]byte(`{"code":2,"msg":` + err.Error() + `}`))
+		return
+	}
 	admin.app.Sites.Store(siteConfig.Domain, site)
 	if siteConfig.Id <= 0 {
 		_, _ = writer.Write([]byte("{\"code\":0,\"action\":\"add\"}"))
@@ -404,7 +406,6 @@ func (admin *AdminModule) siteImport(writer http.ResponseWriter, request *http.R
 	}
 	rows := f.GetRows("Sheet1")
 	var configs = make([]SiteConfig, 0)
-	var domains = make([]string, 0)
 	for k, row := range rows {
 		if k <= 0 {
 			continue
@@ -447,7 +448,11 @@ func (admin *AdminModule) siteImport(writer http.ResponseWriter, request *http.R
 	}
 
 	for _, data := range configs {
-		site := admin.app.NewSite(data)
+		site, err := admin.app.newSite(&data)
+		if err != nil {
+			log.Println(err.Error())
+			continue
+		}
 		admin.app.Sites.Store(data.Domain, site)
 	}
 	_, _ = writer.Write([]byte("{\"code\":0}"))

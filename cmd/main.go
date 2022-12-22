@@ -34,6 +34,7 @@ func main() {
 		AppConfig: &appConfig,
 		Dao:       new(pkg.SiteConfigDao),
 		S2T:       s2t,
+		IpList:    pkg.GetIPList(),
 	}
 	app.Start()
 	// 捕获kill的信号

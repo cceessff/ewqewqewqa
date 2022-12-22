@@ -7,6 +7,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -31,8 +32,9 @@ type App struct {
 	*AppConfig
 	Dao *SiteConfigDao
 	*http.Server
-	Sites sync.Map
-	S2T   *opencc.OpenCC
+	Sites  sync.Map
+	S2T    *opencc.OpenCC
+	IpList []net.IP
 }
 
 func (app *App) Start() {
@@ -114,4 +116,13 @@ func ParseAppConfig() (AppConfig, error) {
 	}
 
 	return appConfig, nil
+}
+func (app *App) newSite(siteConfig *SiteConfig) (*Site, error) {
+	u, err := url.Parse(siteConfig.Url)
+	if err != nil {
+		return nil, err
+	}
+	proxy := newProxy(u, app.IpList)
+	site := &Site{SiteConfig: siteConfig, ReverseProxy: proxy, CachePath: app.CachePath, app: app}
+	return site, nil
 }
