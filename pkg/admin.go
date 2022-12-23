@@ -162,7 +162,7 @@ func (admin *AdminModule) index(w http.ResponseWriter, request *http.Request) {
 		log.Println(err.Error())
 		return
 	}
-	err = t.Execute(w, map[string]string{"admin_uri": admin.prefix, "ExpireDate": "2025-01-01", "version": "正式版"})
+	err = t.Execute(w, map[string]string{"admin_uri": admin.prefix, "ExpireDate": admin.app.ExpireDate})
 	if err != nil {
 		log.Println(err.Error())
 	}

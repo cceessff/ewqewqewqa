@@ -13,6 +13,8 @@ github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZN
 github.com/sgoby/opencc v0.0.0-20181105060730-5b3b1de2620a h1:D4nWzRDSpT6xKoIY+P1NVibPwguBEI+bNFi19UBvyPo=
 github.com/sgoby/opencc v0.0.0-20181105060730-5b3b1de2620a/go.mod h1:70QfEJB4LBsUAY5EtgXdPcTn5FikQr+ey/y8BliiKsc=
 github.com/stretchr/testify v1.2.3-0.20181224173747-660f15d67dbb/go.mod h1:a8OnRcib4nhh0OaRAV+Yts87kKdq0PP7pXfy6kDkUVs=
+github.com/wenzhenxi/gorsa v0.0.0-20220418014903-15feec0f05a6 h1:Muo1GrvVXmbaV47fqKuVLupQSdEoLT6wQOxfgY8BumQ=
+github.com/wenzhenxi/gorsa v0.0.0-20220418014903-15feec0f05a6/go.mod h1:nfhBTKji6rC8lrjyikx8NJ85JHg6ZQam0a9Je+2RVOg=
 golang.org/x/net v0.0.0-20210916014120-12bc252f5db8/go.mod h1:9nx3DQGgdP8bBQD5qxJ1jj9UTztislL4KSBs9R2vV5Y=
 golang.org/x/net v0.4.0 h1:Q5QPcMlvfxFTAPV0+07Xz/MpK9NTXu2VDUuy0FeMfaU=
 golang.org/x/net v0.4.0/go.mod h1:MBQ8lrhLObU/6UmLb4fmbmk5OcyYmqtbGd/9yIeKjEE=

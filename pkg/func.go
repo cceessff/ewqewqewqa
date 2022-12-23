@@ -2,6 +2,9 @@ package pkg
 
 import (
 	"context"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -13,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/wenzhenxi/gorsa"
 	"golang.org/x/net/html/charset"
 )
 
@@ -169,4 +173,57 @@ func readLinks() map[string][]string {
 		result[linkArr[0]] = linkArr[1:]
 	}
 	return result
+}
+
+func ParseAppConfig() (AppConfig, error) {
+	var appConfig AppConfig
+	data, err := ioutil.ReadFile("config.json")
+	if err != nil {
+		return appConfig, err
+	}
+
+	err = json.Unmarshal(data, &appConfig)
+	if err != nil {
+		return appConfig, err
+	}
+	//关键字文件
+	keywordData, err := ioutil.ReadFile("config/keywords.txt")
+	if err == nil && len(keywordData) > 0 {
+		appConfig.Keywords = strings.Split(strings.Replace(string(keywordData), "\r", "", -1), "\n")
+	}
+	//统计js
+	js, err := ioutil.ReadFile("config/inject.js")
+	if err == nil {
+		appConfig.InjectJs = string(js)
+	}
+	//友情链接文本
+	appConfig.FriendLinks = readLinks()
+
+	return appConfig, nil
+}
+
+func GetExpireDate() (string, error) {
+	pubKye := `-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAsfUtexjm9RVM5CpijrNF
+NDI4NfCyMIxW9q+/QaBXiNbqoguWYh1Mmkt+tal6QqObyvmufAbMfJpj0b+cGm96
+KYgAOXUntYAKkTvQLQoQQl9aGY/rxEPuVu+nvN0zsVHrDteaWpMu+7O6OyYS0aKL
+nWhCYpobTp6MTheMfnlMi7p2pJmGxyvUvZNvv6O6OZelOyr7Pb1FeYzpc/8+vkmK
+BGnbyK6EVbZ5vwTaw/X2DI4uDOneKU2qVUyq2nd7pSvbX9aSuQZq1xwWhIXcEY6l
+XzFBxZbhjXaZkaO2CWTHLwcKtSCCd3PkXNCRWQeHM4OelRZJajKSxwcWWTqbusGC
+2wIDAQAB
+-----END PUBLIC KEY-----`
+
+	certBytes, err := ioutil.ReadFile("config/auth.cert")
+	if err != nil {
+		return "", err
+	}
+	hexData, err := gorsa.PublicDecrypt(string(certBytes), pubKye)
+	if err != nil {
+		return "", errors.New("认证失败，无法解密," + err.Error())
+	}
+	data, err := hex.DecodeString(hexData)
+	if err != nil {
+		return "", errors.New("认证失败，无法解码," + err.Error())
+	}
+	return string(data), nil
 }

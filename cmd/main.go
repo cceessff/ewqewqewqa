@@ -51,9 +51,12 @@ func main() {
 		}
 
 	}
+	if app.ExpireDate, err = pkg.GetExpireDate(); err != nil {
+		log.Fatal(err.Error())
+	}
 	app.Start()
 	// 捕获kill的信号
-	sigTERM := make(chan os.Signal)
+	sigTERM := make(chan os.Signal, 1)
 	signal.Notify(sigTERM, syscall.SIGTERM)
 	// 收到信号前会一直阻塞
 	<-sigTERM

@@ -2,12 +2,10 @@ package pkg
 
 import (
 	"context"
-	"encoding/json"
-	"io/ioutil"
+	"errors"
 	"log"
 	"net"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
@@ -37,6 +35,7 @@ type App struct {
 	Sites       sync.Map
 	S2T         *opencc.OpenCC
 	IpList      []net.IP
+	ExpireDate  string
 }
 
 func (app *App) Start() {
@@ -74,10 +73,10 @@ func (app *App) Stop() {
 }
 func (app *App) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 
-	// if authErr := m.auth(); authErr != nil {
-	// 	_, _ = writer.Write([]byte(authErr.Error()))
-	// 	return
-	// }
+	if authErr := app.Auth(); authErr != nil {
+		_, _ = writer.Write([]byte(authErr.Error()))
+		return
+	}
 	if request.URL.Path == app.InjectJsPath {
 		writer.Header().Set("Content-Type", "text/javascript;charset=utf-8")
 		writer.Write([]byte(app.InjectJs))
@@ -93,33 +92,13 @@ func (app *App) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	site.Route(writer, request)
 
 }
-
-func ParseAppConfig() (AppConfig, error) {
-	var appConfig AppConfig
-	data, err := ioutil.ReadFile("config.json")
-	if err != nil {
-		return appConfig, err
+func (app *App) Auth() error {
+	if expire, err := time.Parse("2006-01-02", app.ExpireDate); err != nil || expire.Unix() < time.Now().Unix() {
+		return errors.New("已到期，请重新续期")
 	}
-
-	err = json.Unmarshal(data, &appConfig)
-	if err != nil {
-		return appConfig, err
-	}
-	//关键字文件
-	keywordData, err := ioutil.ReadFile("config/keywords.txt")
-	if err == nil && len(keywordData) > 0 {
-		appConfig.Keywords = strings.Split(strings.Replace(string(keywordData), "\r", "", -1), "\n")
-	}
-	//统计js
-	js, err := ioutil.ReadFile("config/inject.js")
-	if err == nil {
-		appConfig.InjectJs = string(js)
-	}
-	//友情链接文本
-	appConfig.FriendLinks = readLinks()
-
-	return appConfig, nil
+	return nil
 }
+
 func (app *App) MakeSite(siteConfig *SiteConfig) error {
 	return NewSite(siteConfig, app)
 

@@ -12,62 +12,64 @@
     <link id="layuicss-layer" rel="stylesheet" href="{{.admin_uri}}/static/layui/css/modules/layer/default/layer.css"
           media="all">
     <link id="layuicss-layuiAdmin" rel="stylesheet" href="{{.admin_uri}}/static/css/admin.css" media="all">
+    <style>
+        .laytable-cell-11-0-0 {
+            width: 48px;
+        }
+
+        .laytable-cell-11-0-1 {
+            width: 80px;
+        }
+
+        .laytable-cell-11-0-2 {
+            width: 120px;
+        }
+
+        .laytable-cell-11-0-3 {
+            width: 80px;
+        }
+
+        .laytable-cell-11-0-4 {
+            width: 80px;
+        }
+
+        .laytable-cell-11-0-5 {
+            width: 100px;
+        }
+
+    </style>
 </head>
 <body layadmin-themealias="default" class="">
-
-
 <div class="" id="">
     <div class="layadmin-tabsbody-item layui-show">
         <div class="layui-fluid">
             <div class="layui-row layui-col-space15">
                 <div class="layui-col-md12">
                     <div class="layui-card">
-                        <blockquote class="layui-elem-quote">当前版本：{{.version}}</br>到期时间：{{.ExpireDate}}</blockquote>
-                        <div class="layui-card-header">列表</div>
-                        <div class="layui-card-body">
-                            <button id="import" style="display: none"></button>
-                            <div class="search-box">
-                                搜索域名：
+                        
+                        <div class="layui-card-header" style="height: 50px;">
+                            <div class="search-box" style="line-height: 50px;">
+                                <span>搜索域名：</span>
                                 <div class="layui-inline">
                                     <input class="layui-input" name="domain" id="domain-input" autocomplete="off">
                                 </div>
                                 <button class="layui-btn" data-type="reload">搜索</button>
+
+                                <div style="float: right;">
+                                    <span>过期时间:</span><span style="color: red;">{{.ExpireDate}}</span>
+                                </div>
                             </div>
+                        </div>
+                        <div class="layui-card-body">
+                            <button id="import" style="display: none"></button>
                             <table class="layui-hide" id="site-table" lay-filter="site-list-table"></table>
-                            </table>
-                            <style>.laytable-cell-11-0-0 {
-                                width: 48px;
-                            }
-
-                            .laytable-cell-11-0-1 {
-                                width: 80px;
-                            }
-
-                            .laytable-cell-11-0-2 {
-                                width: 120px;
-                            }
-
-                            .laytable-cell-11-0-3 {
-                                width: 80px;
-                            }
-
-                            .laytable-cell-11-0-4 {
-                                width: 80px;
-                            }
-
-                            .laytable-cell-11-0-5 {
-                                width: 100px;
-                            }
-
-                            .laytable-cell-11-0-6 {
-                            }</style>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
-    <script src="/admin/reverseproxy/static/layui/layui.js"></script>
+    <script src="{{.admin_uri}}/static/layui/layui.js"></script>
     <script type="text/html" id="toolBar">
         <button type="button" lay-event="edit" class="layui-btn layui-btn-xs">编辑</button>
         <button type="button" lay-event="delete" class="layui-btn layui-btn-xs layui-btn-danger">删除</button>
@@ -125,13 +127,12 @@
                 reload: function () {
                     var searchInput = jq('#domain-input');
                     //执行重载
-                    console.log(searchInput.val())
                     table.reload('site-table', {
                         page: {
                             curr: 1 //重新从第 1 页开始
                         }
                         , where: {
-                                domain: searchInput.val()
+                             domain: searchInput.val()
                         }
                     });
                 }
@@ -210,7 +211,6 @@
                 if (obj.event == 'edit') {
                     window.location.href = "{{.admin_uri}}/edit?url=" + obj.data.domain;
                 } else if (obj.event == "delete") {
-                    console.log(obj.data.id);
                     layer.confirm('确定删除' + obj.data.domain + '配置吗?', {icon: 3, title: '提示'}, function (index) {
                         //do something
                         jq.ajax({
