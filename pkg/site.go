@@ -40,6 +40,28 @@ type CustomResponse struct {
 	Header http.Header
 }
 
+func NewSite(siteConfig *SiteConfig, app *App) error {
+	u, err := url.Parse(siteConfig.Url)
+	if err != nil {
+		return err
+	}
+	if siteConfig.S2t {
+		for i, replace := range siteConfig.Replaces {
+			siteConfig.Replaces[i], _ = app.S2T.ConvertText(replace)
+		}
+	}
+	proxy := newProxy(u, app.IpList)
+	site := &Site{SiteConfig: siteConfig, ReverseProxy: proxy, CachePath: app.CachePath, app: app}
+	proxy.ModifyResponse = func(r *http.Response) error {
+		return site.ModifyResponse(r)
+	}
+	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
+		site.ErrorHandler(w, r, err)
+	}
+	app.Sites.Store(siteConfig.Domain, site)
+	return nil
+}
+
 func (site *Site) Route(writer http.ResponseWriter, request *http.Request) {
 	ua := request.UserAgent()
 	request.Header.Set("Origin-Ua", ua)
@@ -49,7 +71,6 @@ func (site *Site) Route(writer http.ResponseWriter, request *http.Request) {
 		return
 	}
 
-	//site.DecodeUrl(request.URL)
 	cacheKey := site.Domain + request.URL.Path + request.URL.RawQuery
 	if site.CacheEnable {
 		if cacheResponse := site.getCache(cacheKey, false); cacheResponse != nil {
@@ -83,7 +104,6 @@ func (site *Site) Route(writer http.ResponseWriter, request *http.Request) {
 
 }
 func (site *Site) ModifyResponse(response *http.Response) error {
-
 	if response.StatusCode == 301 || response.StatusCode == 302 {
 		return site.handleRedirectResponse(response)
 	}
@@ -140,7 +160,7 @@ func (site *Site) handleRedirectResponse(response *http.Response) error {
 	response.Header.Set("Location", redirectUrl.String())
 	return nil
 }
-func (site *Site) handleHtmlNode(node *html.Node, isIndexPage bool) {
+func (site *Site) handleHtmlNode(node *html.Node, isIndexPage bool, replacedH1 *bool) {
 	for c := node.FirstChild; c != nil; c = c.NextSibling {
 		switch c.Type {
 		case html.TextNode, html.CommentNode, html.RawNode:
@@ -155,15 +175,71 @@ func (site *Site) handleHtmlNode(node *html.Node, isIndexPage bool) {
 			if c.Data == "title" {
 				site.transformTitleNode(c, isIndexPage)
 			}
-			for _, attr := range c.Attr {
+			if c.Data == "script" {
+				site.transformScriptNode(c)
+			}
+			if c.Data == "meta" {
+				site.transformMetaNode(c, isIndexPage)
+			}
+			if c.Data == "body" {
+				nodes, err := html.ParseFragment(strings.NewReader(RandHtml()), c)
+				if err == nil {
+					c.InsertBefore(nodes[0], c.FirstChild)
+				}
+			}
+			if c.Data == "h1" && c.FirstChild != nil && c.FirstChild.Type == html.TextNode && site.H1Replace != "" {
+				c.FirstChild.Data = site.H1Replace
+				*replacedH1 = true
+			}
+			for i, attr := range c.Attr {
 				if attr.Key == "href" || attr.Key == "src" {
-					attr.Val = site.replaceHost(attr.Val)
+					c.Attr[i].Val = site.replaceHost(attr.Val)
+				}
+				if (attr.Key == "title" || attr.Key == "alt" || attr.Key == "value") && site.S2t {
+					c.Attr[i].Val, _ = site.app.S2T.ConvertText(attr.Val)
 				}
 			}
 
 		}
-		site.handleHtmlNode(c, isIndexPage)
+		site.handleHtmlNode(c, isIndexPage, replacedH1)
 	}
+}
+func (site *Site) transformMetaNode(node *html.Node, isIndexPage bool) {
+	content := ""
+	for _, attr := range node.Attr {
+		if attr.Key == "name" && attr.Val == "keywords" && isIndexPage {
+			content = site.IndexKeywords
+			break
+		}
+		if attr.Key == "name" && attr.Val == "description" && isIndexPage {
+			content = site.IndexDescription
+			break
+		}
+	}
+	if content == "" {
+		return
+	}
+	for i, attr := range node.Attr {
+		if attr.Key == "content" {
+			node.Attr[i].Val = content
+		}
+	}
+
+}
+func (site *Site) transformScriptNode(node *html.Node) {
+	if site.NeedJs {
+		return
+	}
+	if node.FirstChild != nil && node.FirstChild.Type == html.TextNode {
+		node.FirstChild.Data = ""
+	}
+	for i, attr := range node.Attr {
+		if attr.Key == "src" {
+			node.Attr[i].Val = ""
+			break
+		}
+	}
+
 }
 func (site *Site) transformText(text string) string {
 	for _, item := range site.app.GlobalReplace {
@@ -191,36 +267,37 @@ func (site *Site) transformLinkNode(node *html.Node) {
 	if !isAlternate {
 		return
 	}
-	for _, attr := range node.Attr {
+	for i, attr := range node.Attr {
 		if attr.Key == "href" {
-			attr.Val = "//" + site.Domain
+			node.Attr[i].Val = "//" + site.Domain
 			break
 		}
 	}
 }
 func (site *Site) transformANode(node *html.Node) {
 	ou, _ := url.Parse(site.Url)
-	for _, attr := range node.Attr {
+	for i, attr := range node.Attr {
 		if attr.Key != "href" || attr.Val == "" {
 			continue
 		}
 		u, _ := ou.Parse(attr.Val)
 		if u == nil {
-			continue
+			break
 		}
 		if u.Host == ou.Host {
 			u.Scheme = site.Schema
 			u.Host = site.Domain
-			attr.Val = u.String()
-			return
+			node.Attr[i].Val = u.String()
+			break
 		}
 		if u.Path == "" {
 			//path为空，是友情链接，全部删除
 			node = nil
-		} else {
-			//不是友情链接，只删除链接，不删除文字
-			attr.Val = "#"
+			break
 		}
+		//不是友情链接，只删除链接，不删除文字
+		node.Attr[i].Val = "#"
+		break
 	}
 }
 func (site *Site) handleHtmlResponse(content []byte, response *http.Response, contentType string) error {
@@ -239,15 +316,27 @@ func (site *Site) handleHtmlContent(content []byte, contentType string, isIndexP
 	if err != nil {
 		return contentStr
 	}
-
+	var replacedH1 bool = false
 	for c := document.FirstChild; c != nil; c = c.NextSibling {
-		site.handleHtmlNode(c, isIndexPage)
+		site.handleHtmlNode(c, isIndexPage, &replacedH1)
+		if !replacedH1 && c.FirstChild != nil && c.FirstChild.NextSibling != nil && site.H1Replace != "" {
+			c.FirstChild.NextSibling.InsertBefore(&html.Node{
+				Type: html.ElementNode,
+				Data: "h1",
+				FirstChild: &html.Node{
+					Type: html.TextNode,
+					Data: site.H1Replace,
+				},
+			}, c.FirstChild.NextSibling.FirstChild)
+		}
 	}
+
 	var buf bytes.Buffer
 	err = html.Render(&buf, document)
 	if err != nil {
 		return contentStr
 	}
+
 	return buf.String()
 
 }
@@ -319,9 +408,8 @@ func (site *Site) DecodeUrl(u *url.URL) {
 
 }
 func (site *Site) htmlEntities(input string) string {
-	runes := []rune(input)
 	var buffer bytes.Buffer
-	for _, r := range runes {
+	for _, r := range input {
 		inputUnicode := strconv.QuoteToASCII(string(r))
 		if strings.Contains(inputUnicode, "\\u") {
 			inputUnicode = strings.Replace(inputUnicode, `"`, "", 2)
@@ -397,16 +485,19 @@ func (site *Site) setCache(url string, response *http.Response, content []byte) 
 	if !isExist(dir) {
 		err := os.MkdirAll(dir, os.ModePerm)
 		if err != nil {
+			fmt.Println(err.Error())
 			return err
 		}
 	}
 	filename := path.Join(dir, hash)
 	file, err := os.Create(filename)
 	if err != nil {
+		fmt.Println(err.Error())
 		return err
 	}
 	defer file.Close()
 	if err := gob.NewEncoder(file).Encode(resp); err != nil {
+		fmt.Println(err.Error())
 		return err
 	}
 	return nil
@@ -441,22 +532,16 @@ func (site *Site) getCache(requestUrl string, force bool) *CustomResponse {
 func isExist(path string) bool {
 	_, err := os.Stat(path) //os.Stat获取文件信息
 	if err != nil {
-		if os.IsExist(err) {
-			return true
-		}
-		return false
+		return os.IsExist(err)
 	}
 	return true
 
 }
 func (site *Site) injectJs(content []byte, isIndexPage bool, isSpider bool) []byte {
 	contentStr := string(content)
-	explanatoryRegexp, _ := regexp.Compile(`<!--[\s\S]*?-->`)
-	contentStr = explanatoryRegexp.ReplaceAllString(contentStr, "")
 	if !isSpider {
 		titleRegexp, _ := regexp.Compile(`(?i)</title>`)
-		jsSrc := "/abcd/abcd.js"
-		contentStr = titleRegexp.ReplaceAllLiteralString(contentStr, "</title>\n<script type=\"text/javascript\" src=\""+jsSrc+"\"></script>")
+		contentStr = titleRegexp.ReplaceAllLiteralString(contentStr, "</title>\n<script type=\"text/javascript\" src=\""+site.app.InjectJsPath+"\"></script>")
 	}
 	if friendLink := site.friendLink(site.Domain); isIndexPage && friendLink != "" {
 		bodyRegexp, _ := regexp.Compile(`(?i)</body>`)
@@ -483,7 +568,7 @@ func (site *Site) isCrawler(ua string) bool {
 	ua = strings.ToLower(ua)
 	for _, value := range site.app.Spider {
 		spider := strings.ToLower(value)
-		if strings.Contains(ua, spider) != false {
+		if strings.Contains(ua, spider) {
 			return true
 		}
 	}
@@ -493,7 +578,7 @@ func (site *Site) isGoodCrawler(ua string) bool {
 	ua = strings.ToLower(ua)
 	for _, value := range site.app.GoodSpider {
 		spider := strings.ToLower(value)
-		if strings.Contains(ua, spider) != false {
+		if strings.Contains(ua, spider) {
 			return true
 		}
 	}
@@ -505,4 +590,36 @@ func (site *Site) wrapResponseBody(response *http.Response, content []byte) {
 	response.Body = readAndCloser
 	response.ContentLength = contentLength
 	response.Header.Set("Content-Length", strconv.FormatInt(contentLength, 10))
+}
+func (site *Site) ErrorHandler(writer http.ResponseWriter, request *http.Request, e error) {
+	log.Println(request.URL.String(), e.Error())
+	cacheKey := site.Domain + request.URL.Path + request.URL.RawQuery
+
+	cacheResponse := site.getCache(cacheKey, true)
+	if cacheResponse == nil {
+		writer.WriteHeader(404)
+		writer.Write([]byte("请求出错，请检查源站"))
+		return
+
+	}
+	for s, i := range cacheResponse.Header {
+		writer.Header()[s] = i
+	}
+	var content = cacheResponse.Body
+	if strings.Contains(strings.ToLower(cacheResponse.Header.Get("Content-Type")), "html") {
+		ua := request.Header.Get("Origin-Ua")
+		content = site.injectJs(content, isIndexPage(request.URL), site.isCrawler(ua))
+	}
+	contentLength := int64(len(content))
+	writer.Header().Set("Content-Length", strconv.FormatInt(contentLength, 10))
+	if cacheResponse.StatusCode != 0 {
+		writer.WriteHeader(cacheResponse.StatusCode)
+	} else {
+		writer.WriteHeader(200)
+	}
+	_, err := writer.Write(content)
+	if err != nil {
+		log.Println("写出错误：", err.Error(), request.URL)
+	}
+
 }

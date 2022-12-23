@@ -33,13 +33,14 @@ type SiteConfigDao struct {
 	db *sql.DB
 }
 
-func (dao *SiteConfigDao) OpenDb() error {
+func NewDao() (*SiteConfigDao, error) {
+	dao := &SiteConfigDao{}
 	db, err := sql.Open("sqlite3", "data.db")
 	if err != nil {
-		return err
+		return nil, err
 	}
 	dao.db = db
-	return nil
+	return dao, nil
 }
 func (dao *SiteConfigDao) GetOne(domain string) (SiteConfig, error) {
 	domain = strings.TrimSpace(domain)

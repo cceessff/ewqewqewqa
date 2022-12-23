@@ -30,11 +30,26 @@ func main() {
 	if err != nil {
 		log.Fatal("转繁体功能错误" + err.Error())
 	}
+	dao, err := pkg.NewDao()
+	if err != nil {
+		log.Fatal("数据库错误" + err.Error())
+	}
+	siteConfigs, err := dao.GetAll()
+	if err != nil {
+		log.Fatal(err.Error())
+	}
 	app := pkg.App{
 		AppConfig: &appConfig,
-		Dao:       new(pkg.SiteConfigDao),
+		Dao:       dao,
 		S2T:       s2t,
 		IpList:    pkg.GetIPList(),
+	}
+	for _, siteConfig := range siteConfigs {
+		err = app.MakeSite(&siteConfig)
+		if err != nil {
+			log.Fatal(err.Error())
+		}
+
 	}
 	app.Start()
 	// 捕获kill的信号

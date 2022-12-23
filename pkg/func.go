@@ -2,6 +2,8 @@ package pkg
 
 import (
 	"context"
+	"fmt"
+	"io/ioutil"
 	"log"
 	"math/rand"
 	"net"
@@ -19,7 +21,7 @@ func GetHost(request *http.Request) string {
 	if host == "" {
 		host = request.Header.Get("Host")
 	}
-	if strings.Index(host, ":") != -1 {
+	if strings.Contains(host, ":") {
 		host, _, _ = net.SplitHostPort(host)
 	}
 	return host
@@ -83,7 +85,7 @@ func newProxy(target *url.URL, ipList []net.IP) *httputil.ReverseProxy {
 	transport := &http.Transport{
 		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 			var localIp net.IP = net.IPv4(0, 0, 0, 0)
-			if ipList != nil && len(ipList) > 0 {
+			if len(ipList) > 0 {
 				ipIndex := rand.Intn(len(ipList))
 				localIp = ipList[ipIndex]
 			}
@@ -132,4 +134,39 @@ func isPublicIP(IP net.IP) bool {
 		}
 	}
 	return false
+}
+func RandHtml() string {
+	htmlTags := []string{"abbr", "address", "area", "article", "aside", "b", "base", "bdo", "blockquote", "button", "cite", "code", "dd", "del", "details", "dfn", "dl", "dt", "em", "figure", "font", "i", "ins", "kbd", "label", "legend", "li", "mark", "meter", "ol", "option", "p", "q", "progress", "rt", "ruby", "samp", "section", "select", "small", "strong", "tt", "u"}
+	var result string
+	for i := 0; i < 100; i++ {
+		t := htmlTags[rand.Intn(len(htmlTags))]
+		result = result + fmt.Sprintf(`<%s id="%s">%s</%s>`, t, RandStr(2), RandStr(10), t)
+	}
+	return "<div style=\"display:none\">" + result + "</div>"
+}
+func RandStr(count int) string {
+	chars := []rune("ABCDEFGHIJKLNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz")
+	count = rand.Intn(count) + 6
+	result := ""
+	for i := 0; i < count; i++ {
+		result = result + string(chars[rand.Intn(len(chars))])
+	}
+	return result
+
+}
+func readLinks() map[string][]string {
+	result := make(map[string][]string)
+	linkData, err := ioutil.ReadFile("config/links.txt")
+	if err != nil && len(linkData) <= 0 {
+		return result
+	}
+	linkLines := strings.Split(strings.Replace(string(linkData), "\r", "", -1), "\n")
+	for _, line := range linkLines {
+		linkArr := strings.Split(line, "||")
+		if len(linkArr) < 2 {
+			continue
+		}
+		result[linkArr[0]] = linkArr[1:]
+	}
+	return result
 }

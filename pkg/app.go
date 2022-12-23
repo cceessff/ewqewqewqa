@@ -7,7 +7,6 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -18,12 +17,14 @@ import (
 
 type AppConfig struct {
 	Port          string              `json:"port"`
+	AdminPort     string              `json:"admin_port"`
 	CachePath     string              `json:"cache_path"`
 	Spider        []string            `json:"spider"`
 	GoodSpider    []string            `json:"good_spider"`
 	AdminUri      string              `json:"admin_uri"`
 	UserAgent     string              `json:"user_agent"`
 	GlobalReplace []map[string]string `json:"global_replace"`
+	InjectJsPath  string              `json:"inject_js_path"`
 	Keywords      []string
 	InjectJs      string
 	FriendLinks   map[string][]string
@@ -32,9 +33,10 @@ type App struct {
 	*AppConfig
 	Dao *SiteConfigDao
 	*http.Server
-	Sites  sync.Map
-	S2T    *opencc.OpenCC
-	IpList []net.IP
+	AdminServer *http.Server
+	Sites       sync.Map
+	S2T         *opencc.OpenCC
+	IpList      []net.IP
 }
 
 func (app *App) Start() {
@@ -44,8 +46,15 @@ func (app *App) Start() {
 	}
 	l = netutil.LimitListener(l, 256*2048)
 	app.Server = &http.Server{Handler: app}
+	admin := NewAdmin(app)
+	app.AdminServer = &http.Server{Handler: admin, Addr: ":" + app.AdminPort}
 	go func() {
 		if err := app.Serve(l); err != nil {
+			log.Fatalln("监听错误" + err.Error())
+		}
+	}()
+	go func() {
+		if err := app.AdminServer.ListenAndServe(); err != nil {
 			log.Fatalln("监听错误" + err.Error())
 		}
 	}()
@@ -57,6 +66,10 @@ func (app *App) Stop() {
 	if err != nil {
 		log.Println("shutdown error" + err.Error())
 	}
+	err = app.AdminServer.Shutdown(ctx)
+	if err != nil {
+		log.Println("shutdown error" + err.Error())
+	}
 	defer cancel()
 }
 func (app *App) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
@@ -65,7 +78,8 @@ func (app *App) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	// 	_, _ = writer.Write([]byte(authErr.Error()))
 	// 	return
 	// }
-	if request.URL.Path == "/abcd/abcd.js" {
+	if request.URL.Path == app.InjectJsPath {
+		writer.Header().Set("Content-Type", "text/javascript;charset=utf-8")
 		writer.Write([]byte(app.InjectJs))
 		return
 	}
@@ -76,7 +90,7 @@ func (app *App) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 		return
 	}
 	site := item.(*Site)
-	site.ServeHTTP(writer, request)
+	site.Route(writer, request)
 
 }
 
@@ -94,8 +108,7 @@ func ParseAppConfig() (AppConfig, error) {
 	//关键字文件
 	keywordData, err := ioutil.ReadFile("config/keywords.txt")
 	if err == nil && len(keywordData) > 0 {
-		keywordStr := strings.Replace(string(keywordData), "\r", "", -1)
-		appConfig.Keywords = strings.Split(keywordStr, "\n")
+		appConfig.Keywords = strings.Split(strings.Replace(string(keywordData), "\r", "", -1), "\n")
 	}
 	//统计js
 	js, err := ioutil.ReadFile("config/inject.js")
@@ -103,26 +116,11 @@ func ParseAppConfig() (AppConfig, error) {
 		appConfig.InjectJs = string(js)
 	}
 	//友情链接文本
-	linkData, err := ioutil.ReadFile("config/links.txt")
-	if err == nil && len(linkData) > 0 {
-		linkLines := strings.Split(strings.Replace(string(linkData), "\r", "", -1), "\n")
-		for _, line := range linkLines {
-			linkArr := strings.Split(line, "||")
-			if len(linkArr) < 2 {
-				continue
-			}
-			appConfig.FriendLinks[linkArr[0]] = linkArr[1:]
-		}
-	}
+	appConfig.FriendLinks = readLinks()
 
 	return appConfig, nil
 }
-func (app *App) newSite(siteConfig *SiteConfig) (*Site, error) {
-	u, err := url.Parse(siteConfig.Url)
-	if err != nil {
-		return nil, err
-	}
-	proxy := newProxy(u, app.IpList)
-	site := &Site{SiteConfig: siteConfig, ReverseProxy: proxy, CachePath: app.CachePath, app: app}
-	return site, nil
+func (app *App) MakeSite(siteConfig *SiteConfig) error {
+	return NewSite(siteConfig, app)
+
 }

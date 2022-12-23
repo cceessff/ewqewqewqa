@@ -3,9 +3,12 @@ package pkg
 import (
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html/template"
+	"io/ioutil"
 	"log"
+	"math/rand"
 	"net/http"
 	"net/url"
 	"os"
@@ -24,8 +27,43 @@ type AdminModule struct {
 	prefix   string
 }
 
-func newAdmin(dao *SiteConfigDao, app *App) *AdminModule {
-	admin := &AdminModule{dao: dao, app: app, prefix: app.AdminUri}
+func genUserAndPass() (string, string) {
+	chars := []rune("abcdefghijklmnopqrstuvwxyz")
+	user := ""
+	for i := 0; i < 8; i++ {
+		user = user + string(chars[rand.Intn(len(chars))])
+	}
+	chars = []rune("abcdefghijklmnopqrstuvwxyz1234567890")
+	pass := ""
+	for i := 0; i < 12; i++ {
+		pass = pass + string(chars[rand.Intn(len(chars))])
+	}
+	return user, pass
+}
+func makeAdminUser() (string, string, error) {
+	passBytes, err := ioutil.ReadFile("config/passwd")
+	if err != nil || len(passBytes) == 0 {
+		userName, password := genUserAndPass()
+		err = ioutil.WriteFile("config/passwd", []byte(userName+":"+password), os.ModePerm)
+		if err != nil {
+			return "", "", errors.New("生成用户文件错误" + err.Error())
+		}
+		return userName, password, nil
+
+	}
+	userAndPass := strings.Split(string(passBytes), ":")
+	if len(userAndPass) != 2 {
+		return "", "", errors.New("用户文件内容错误")
+	}
+	return userAndPass[0], userAndPass[1], nil
+}
+
+func NewAdmin(app *App) *AdminModule {
+	userName, password, err := makeAdminUser()
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+	admin := &AdminModule{dao: app.Dao, app: app, prefix: app.AdminUri, UserName: userName, Password: password}
 	admin.Initialize()
 	return admin
 }
@@ -52,37 +90,22 @@ func (admin *AdminModule) Initialize() {
 
 func (admin *AdminModule) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	cookie, _ := r.Cookie("login_cert")
-	if r.URL.Path != admin.prefix+"/login" {
-
-		if cookie == nil || cookie.Value == "" {
-			http.Redirect(w, r, admin.prefix+"/login", http.StatusMovedPermanently)
-			return
-		}
-		sum := sha256.New().Sum([]byte(admin.UserName + admin.Password))
-		loginSign := fmt.Sprintf("%x", sum)
-		if cookie.Value != loginSign {
-			http.Redirect(w, r, admin.prefix+"/login", http.StatusMovedPermanently)
-			return
-		}
-	} else {
-
-		if cookie != nil && cookie.Value != "" {
-			sum := sha256.New().Sum([]byte(admin.UserName + admin.Password))
-			loginSign := fmt.Sprintf("%x", sum)
-			if cookie.Value == loginSign {
-				http.Redirect(w, r, admin.prefix, http.StatusMovedPermanently)
-				return
-			}
-		}
-
+	sum := sha256.New().Sum([]byte(admin.UserName + admin.Password))
+	loginSign := fmt.Sprintf("%x", sum)
+	if r.URL.Path != admin.prefix+"/login" && (cookie == nil || cookie.Value != loginSign) {
+		http.Redirect(w, r, admin.prefix+"/login", http.StatusMovedPermanently)
+		return
+	}
+	if r.URL.Path == admin.prefix+"/login" && cookie != nil && cookie.Value == loginSign {
+		http.Redirect(w, r, admin.prefix, http.StatusMovedPermanently)
+		return
 	}
 	admin.adminMux.ServeHTTP(w, r)
 }
 
 func (admin *AdminModule) login(writer http.ResponseWriter, request *http.Request) {
 	if request.Method == "GET" {
-		t := template.New("login.html")
-		t = template.Must(t.ParseFiles("admin/login.html"))
+		t := template.Must(template.New("login.html").ParseFiles("admin/login.html"))
 		err := t.Execute(writer, map[string]string{"admin_uri": admin.prefix})
 		if err != nil {
 			log.Println(err.Error())
@@ -91,19 +114,14 @@ func (admin *AdminModule) login(writer http.ResponseWriter, request *http.Reques
 	}
 	err := request.ParseForm()
 	if err != nil {
+		log.Println(err.Error())
 		writer.WriteHeader(404)
+		_, _ = writer.Write([]byte(`{"code":5,"msg":"请求出错"}`))
+		return
 	}
 	userName := request.PostFormValue("user_name")
 	password := request.PostFormValue("password")
-	if userName == "" {
-		http.Redirect(writer, request, admin.prefix+"/login", http.StatusMovedPermanently)
-		return
-	}
-	if password == "" {
-		http.Redirect(writer, request, admin.prefix+"/login", http.StatusMovedPermanently)
-		return
-	}
-	if admin.UserName != userName || admin.Password != password {
+	if userName == "" || password == "" || admin.UserName != userName || admin.Password != password {
 		http.Redirect(writer, request, admin.prefix+"/login", http.StatusMovedPermanently)
 		return
 	}
@@ -354,12 +372,12 @@ func (admin *AdminModule) ConfigSave(writer http.ResponseWriter, request *http.R
 		_, _ = writer.Write([]byte(`{"code":1,"msg":` + err.Error() + `}`))
 		return
 	}
-	site, err := admin.app.newSite(&siteConfig)
+	err = admin.app.MakeSite(&siteConfig)
 	if err != nil {
 		_, _ = writer.Write([]byte(`{"code":2,"msg":` + err.Error() + `}`))
 		return
 	}
-	admin.app.Sites.Store(siteConfig.Domain, site)
+
 	if siteConfig.Id <= 0 {
 		_, _ = writer.Write([]byte("{\"code\":0,\"action\":\"add\"}"))
 		return
@@ -448,12 +466,10 @@ func (admin *AdminModule) siteImport(writer http.ResponseWriter, request *http.R
 	}
 
 	for _, data := range configs {
-		site, err := admin.app.newSite(&data)
+		err := admin.app.MakeSite(&data)
 		if err != nil {
 			log.Println(err.Error())
-			continue
 		}
-		admin.app.Sites.Store(data.Domain, site)
 	}
 	_, _ = writer.Write([]byte("{\"code\":0}"))
 }
