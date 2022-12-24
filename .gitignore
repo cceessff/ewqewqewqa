@@ -5,3 +5,5 @@ cmd/cache/
 cmd/config/auth.cert
 cmd/comfig/muban.xlxs
 cmd/config/passwd
+cmd/mirror
+cmd/pid

@@ -68,38 +68,43 @@ func NewAdmin(app *App) *AdminModule {
 	return admin
 }
 func (admin *AdminModule) Initialize() {
-	fileHandler := http.StripPrefix(admin.prefix, http.FileServer(http.Dir("admin")))
+	fileHandler := http.FileServer(http.Dir("admin"))
 	admin.adminMux = http.NewServeMux()
 	prefix := admin.prefix
-	admin.adminMux.Handle(prefix+"/login", http.HandlerFunc(admin.login))
-	admin.adminMux.Handle(prefix, http.HandlerFunc(admin.index))
-	admin.adminMux.Handle(prefix+"/list", http.HandlerFunc(admin.siteList))
-	admin.adminMux.Handle(prefix+"/edit", http.HandlerFunc(admin.editSite))
+	admin.adminMux.Handle("/static/", fileHandler)
 
-	admin.adminMux.Handle(prefix+"/", http.HandlerFunc(fileHandler.ServeHTTP))
+	admin.adminMux.Handle(prefix+"/login", admin.AuthMiddleware(admin.login))
+	admin.adminMux.Handle(prefix, admin.AuthMiddleware(admin.index))
+	admin.adminMux.Handle(prefix+"/list", admin.AuthMiddleware(admin.siteList))
+	admin.adminMux.Handle(prefix+"/edit", admin.AuthMiddleware(admin.editSite))
 
-	admin.adminMux.Handle(prefix+"/save_config", http.HandlerFunc(admin.ConfigSave))
-	admin.adminMux.Handle(prefix+"/delete", http.HandlerFunc(admin.siteDelete))
+	admin.adminMux.Handle(prefix+"/save_config", admin.AuthMiddleware(admin.ConfigSave))
+	admin.adminMux.Handle(prefix+"/delete", admin.AuthMiddleware(admin.siteDelete))
 
-	admin.adminMux.Handle(prefix+"/import", http.HandlerFunc(admin.siteImport))
-	admin.adminMux.Handle(prefix+"/delete_cache", http.HandlerFunc(admin.DeleteCache))
-	admin.adminMux.Handle(prefix+"/mul_del", http.HandlerFunc(admin.MulDel))
-	admin.adminMux.Handle(prefix+"/forbidden_words", http.HandlerFunc(admin.forbiddenWords))
+	admin.adminMux.Handle(prefix+"/import", admin.AuthMiddleware(admin.siteImport))
+	admin.adminMux.Handle(prefix+"/delete_cache", admin.AuthMiddleware(admin.DeleteCache))
+	admin.adminMux.Handle(prefix+"/mul_del", admin.AuthMiddleware(admin.MulDel))
+	admin.adminMux.Handle(prefix+"/forbidden_words", admin.AuthMiddleware(admin.forbiddenWords))
 
 }
 
+func (admin *AdminModule) AuthMiddleware(h func(w http.ResponseWriter, r *http.Request)) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		cookie, _ := r.Cookie("login_cert")
+		sum := sha256.New().Sum([]byte(admin.UserName + admin.Password))
+		loginSign := fmt.Sprintf("%x", sum)
+		if r.URL.Path != admin.prefix+"/login" && (cookie == nil || cookie.Value != loginSign) {
+			http.Redirect(w, r, admin.prefix+"/login", http.StatusMovedPermanently)
+			return
+		}
+		if r.URL.Path == admin.prefix+"/login" && cookie != nil && cookie.Value == loginSign {
+			http.Redirect(w, r, admin.prefix, http.StatusMovedPermanently)
+			return
+		}
+		h(w, r)
+	})
+}
 func (admin *AdminModule) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	cookie, _ := r.Cookie("login_cert")
-	sum := sha256.New().Sum([]byte(admin.UserName + admin.Password))
-	loginSign := fmt.Sprintf("%x", sum)
-	if r.URL.Path != admin.prefix+"/login" && (cookie == nil || cookie.Value != loginSign) {
-		http.Redirect(w, r, admin.prefix+"/login", http.StatusMovedPermanently)
-		return
-	}
-	if r.URL.Path == admin.prefix+"/login" && cookie != nil && cookie.Value == loginSign {
-		http.Redirect(w, r, admin.prefix, http.StatusMovedPermanently)
-		return
-	}
 	admin.adminMux.ServeHTTP(w, r)
 }
 
