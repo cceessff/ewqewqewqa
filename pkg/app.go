@@ -3,12 +3,13 @@ package pkg
 import (
 	"context"
 	"errors"
-	"log"
 	"net"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 
+	"github.com/gookit/slog"
 	"github.com/sgoby/opencc"
 	"golang.org/x/net/netutil"
 )
@@ -36,25 +37,29 @@ type App struct {
 	S2T         *opencc.OpenCC
 	IpList      []net.IP
 	ExpireDate  string
+	Logger      *slog.Logger
 }
 
 func (app *App) Start() {
 	l, err := net.Listen("tcp", ":"+app.Port)
 	if err != nil {
-		log.Fatalln(err.Error())
+		app.Logger.Fatalln("net listen", err.Error())
+		return
 	}
 	l = netutil.LimitListener(l, 256*2048)
 	app.Server = &http.Server{Handler: app}
 	admin := NewAdmin(app)
 	app.AdminServer = &http.Server{Handler: admin, Addr: ":" + app.AdminPort}
 	go func() {
-		if err := app.Serve(l); err != nil {
-			log.Fatalln("监听错误" + err.Error())
+		if err := app.Serve(l); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			app.Logger.Fatalln("监听错误" + err.Error())
+			os.Exit(1)
 		}
 	}()
 	go func() {
-		if err := app.AdminServer.ListenAndServe(); err != nil {
-			log.Fatalln("监听错误" + err.Error())
+		if err := app.AdminServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			app.Logger.Fatalln("监听错误" + err.Error())
+			os.Exit(1)
 		}
 	}()
 
@@ -63,11 +68,11 @@ func (app *App) Stop() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	err := app.Shutdown(ctx)
 	if err != nil {
-		log.Println("shutdown error" + err.Error())
+		app.Logger.Error("shutdown error" + err.Error())
 	}
 	err = app.AdminServer.Shutdown(ctx)
 	if err != nil {
-		log.Println("shutdown error" + err.Error())
+		app.Logger.Error("shutdown error" + err.Error())
 	}
 	defer cancel()
 }

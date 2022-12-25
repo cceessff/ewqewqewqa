@@ -35,7 +35,7 @@ type SiteConfigDao struct {
 
 func NewDao() (*SiteConfigDao, error) {
 	dao := &SiteConfigDao{}
-	db, err := sql.Open("sqlite3", "data.db")
+	db, err := sql.Open("sqlite3", "config/data.db")
 	if err != nil {
 		return nil, err
 	}

@@ -61,7 +61,8 @@ func makeAdminUser() (string, string, error) {
 func NewAdmin(app *App) *AdminModule {
 	userName, password, err := makeAdminUser()
 	if err != nil {
-		log.Fatal(err.Error())
+		app.Logger.Fatal("make admin user error", err.Error())
+		os.Exit(1)
 	}
 	admin := &AdminModule{dao: app.Dao, app: app, prefix: app.AdminUri, UserName: userName, Password: password}
 	admin.Initialize()
@@ -113,12 +114,13 @@ func (admin *AdminModule) login(writer http.ResponseWriter, request *http.Reques
 		t := template.Must(template.New("login.html").ParseFiles("admin/login.html"))
 		err := t.Execute(writer, map[string]string{"admin_uri": admin.prefix})
 		if err != nil {
-			log.Println(err.Error())
+			admin.app.Logger.Error("login template error", err.Error())
 		}
 		return
 	}
 	err := request.ParseForm()
 	if err != nil {
+		admin.app.Logger.Error("login ParseForm error", err.Error())
 		log.Println(err.Error())
 		writer.WriteHeader(404)
 		_, _ = writer.Write([]byte(`{"code":5,"msg":"请求出错"}`))
@@ -140,6 +142,7 @@ func (admin *AdminModule) login(writer http.ResponseWriter, request *http.Reques
 func (admin *AdminModule) MulDel(writer http.ResponseWriter, request *http.Request) {
 	err := request.ParseForm()
 	if err != nil {
+		admin.app.Logger.Error("MulDel ParseForm error", err.Error())
 		_, _ = writer.Write([]byte(`{"code":5,"msg":"请求数据出错"}`))
 	}
 	domains := request.Form.Get("domains")
@@ -150,6 +153,7 @@ func (admin *AdminModule) MulDel(writer http.ResponseWriter, request *http.Reque
 	domainArr := strings.Split(domains, "\n")
 	err = admin.dao.MultiDel(domainArr)
 	if err != nil {
+		admin.app.Logger.Error("MulDel Dao error", err.Error())
 		_, _ = writer.Write([]byte(`{"code":4,"msg":"` + err.Error() + `"}`))
 		return
 	}
@@ -164,12 +168,12 @@ func (admin *AdminModule) MulDel(writer http.ResponseWriter, request *http.Reque
 func (admin *AdminModule) index(w http.ResponseWriter, request *http.Request) {
 	t, err := template.ParseFiles("admin/admin.html")
 	if err != nil {
-		log.Println(err.Error())
+		admin.app.Logger.Error("index template error", err.Error())
 		return
 	}
 	err = t.Execute(w, map[string]string{"admin_uri": admin.prefix, "ExpireDate": admin.app.ExpireDate})
 	if err != nil {
-		log.Println(err.Error())
+		admin.app.Logger.Error("index template error", err.Error())
 	}
 }
 func (admin *AdminModule) forbiddenWords(writer http.ResponseWriter, request *http.Request) {
@@ -178,12 +182,13 @@ func (admin *AdminModule) forbiddenWords(writer http.ResponseWriter, request *ht
 		t = template.Must(t.ParseFiles("admin/forbidden_words.html"))
 		err := t.Execute(writer, map[string]interface{}{"admin_uri": admin.prefix})
 		if err != nil {
-			log.Println(err.Error())
+			admin.app.Logger.Error("forbiddenWords template error", err.Error())
 		}
 		return
 	}
 	err := request.ParseForm()
 	if err != nil {
+		admin.app.Logger.Error("forbiddenWords parseform error", err.Error())
 		_, _ = writer.Write([]byte(`{"code":5,"msg":"请求参数错误"}`))
 	}
 	forbiddenWord := request.Form.Get("forbidden_word")
@@ -195,6 +200,7 @@ func (admin *AdminModule) forbiddenWords(writer http.ResponseWriter, request *ht
 	}
 	domainArr, err := admin.dao.ForbiddenWordReplace(forbiddenWord, replaceWord, splitWord)
 	if err != nil {
+		admin.app.Logger.Error("forbiddenWords ForbiddenWordReplace error", err.Error())
 		_, _ = writer.Write([]byte(`{"code":3,"msg":"` + err.Error() + `"}`))
 		return
 	}
@@ -228,7 +234,7 @@ func (admin *AdminModule) editSite(writer http.ResponseWriter, request *http.Req
 	}
 	err = t.Execute(writer, map[string]interface{}{"proxy_config": siteConfig, "admin_uri": admin.prefix})
 	if err != nil {
-		log.Println(err.Error())
+		admin.app.Logger.Error("editSite template error", err.Error())
 	}
 
 }

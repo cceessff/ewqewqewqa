@@ -9,7 +9,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"math/rand"
 	"net/http"
 	"net/http/httputil"
@@ -91,7 +90,7 @@ func (site *Site) Route(writer http.ResponseWriter, request *http.Request) {
 			}
 			_, err := writer.Write(content)
 			if err != nil {
-				log.Println("写出错误：", err.Error(), request.URL)
+				site.app.Logger.Error("写出错误：", err.Error(), request.URL)
 			}
 			return
 		}
@@ -117,7 +116,6 @@ func (site *Site) ModifyResponse(response *http.Response) error {
 
 		if strings.Contains(contentType, "text/html") {
 			return site.handleHtmlResponse(content, response, contentType)
-
 		} else if strings.Contains(contentType, "css") || strings.Contains(contentType, "javascript") {
 			var contentStr = GBk2UTF8(content, contentType)
 			u, _ := url.Parse(site.Url)
@@ -132,13 +130,12 @@ func (site *Site) ModifyResponse(response *http.Response) error {
 			site.wrapResponseBody(response, []byte(contentStr))
 			return nil
 
-		} else {
-			site.setCache(cacheKey, response, content)
-			site.wrapResponseBody(response, content)
-			return nil
 		}
-	}
+		site.setCache(cacheKey, response, content)
+		site.wrapResponseBody(response, content)
+		return nil
 
+	}
 	if response.StatusCode > 400 && response.StatusCode < 500 {
 		content := []byte("访问的页面不存在")
 		site.setCache(cacheKey, response, content)
@@ -154,9 +151,9 @@ func (site *Site) handleRedirectResponse(response *http.Response) error {
 	}
 	redirectUrl.Host = site.Domain
 	redirectUrl.Scheme = site.Schema
-	if !isIndexPage(redirectUrl) {
-		site.EncodeUrl(redirectUrl)
-	}
+	// if !isIndexPage(redirectUrl) {
+	// 	site.EncodeUrl(redirectUrl)
+	// }
 	response.Header.Set("Location", redirectUrl.String())
 	return nil
 }
@@ -314,6 +311,7 @@ func (site *Site) handleHtmlContent(content []byte, contentType string, isIndexP
 	var contentStr = GBk2UTF8(content, contentType)
 	document, err := html.Parse(strings.NewReader(contentStr))
 	if err != nil {
+		site.app.Logger.Error("html parse error", err.Error())
 		return contentStr
 	}
 	var replacedH1 bool = false
@@ -334,6 +332,7 @@ func (site *Site) handleHtmlContent(content []byte, contentType string, isIndexP
 	var buf bytes.Buffer
 	err = html.Render(&buf, document)
 	if err != nil {
+		site.app.Logger.Error("html render error", err.Error())
 		return contentStr
 	}
 
@@ -485,19 +484,19 @@ func (site *Site) setCache(url string, response *http.Response, content []byte) 
 	if !isExist(dir) {
 		err := os.MkdirAll(dir, os.ModePerm)
 		if err != nil {
-			fmt.Println(err.Error())
+			site.app.Logger.Error("MkdirAll error", dir, err.Error())
 			return err
 		}
 	}
 	filename := path.Join(dir, hash)
 	file, err := os.Create(filename)
 	if err != nil {
-		fmt.Println(err.Error())
+		site.app.Logger.Error("os.Create error", filename, err.Error())
 		return err
 	}
 	defer file.Close()
 	if err := gob.NewEncoder(file).Encode(resp); err != nil {
-		fmt.Println(err.Error())
+		site.app.Logger.Error("gob.NewEncoder error", filename, err.Error())
 		return err
 	}
 	return nil
@@ -509,6 +508,7 @@ func (site *Site) getCache(requestUrl string, force bool) *CustomResponse {
 	filename := path.Join(dir, hash)
 	fileInfo, err := os.Stat(filename)
 	if err != nil {
+		site.app.Logger.Error("get cache os.Stat error", filename, err.Error())
 		return nil
 	}
 	if !force {
@@ -592,7 +592,7 @@ func (site *Site) wrapResponseBody(response *http.Response, content []byte) {
 	response.Header.Set("Content-Length", strconv.FormatInt(contentLength, 10))
 }
 func (site *Site) ErrorHandler(writer http.ResponseWriter, request *http.Request, e error) {
-	log.Println(request.URL.String(), e.Error())
+	site.app.Logger.Error(request.URL.String(), e.Error())
 	cacheKey := site.Domain + request.URL.Path + request.URL.RawQuery
 
 	cacheResponse := site.getCache(cacheKey, true)
@@ -619,7 +619,7 @@ func (site *Site) ErrorHandler(writer http.ResponseWriter, request *http.Request
 	}
 	_, err := writer.Write(content)
 	if err != nil {
-		log.Println("写出错误：", err.Error(), request.URL)
+		site.app.Logger.Error("写出错误：", err.Error(), request.URL)
 	}
 
 }

@@ -177,7 +177,7 @@ func readLinks() map[string][]string {
 
 func ParseAppConfig() (AppConfig, error) {
 	var appConfig AppConfig
-	data, err := ioutil.ReadFile("config.json")
+	data, err := ioutil.ReadFile("config/config.json")
 	if err != nil {
 		return appConfig, err
 	}
