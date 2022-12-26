@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"runtime"
 	"seo/mirror/pkg"
 	"strconv"
 	"syscall"
@@ -54,9 +55,23 @@ func main() {
 			fmt.Println("read pid error", err.Error())
 			return
 		}
-		err = syscall.Kill(pid, syscall.SIGTERM)
+		process, err := os.FindProcess(pid)
 		if err != nil {
-			fmt.Println("read pid error", err.Error())
+			fmt.Println("find process error", err.Error())
+			return
+		}
+		if runtime.GOOS == "windows" {
+			err = process.Signal(syscall.SIGKILL)
+		} else {
+			err = process.Signal(syscall.SIGTERM)
+			// err = syscall.Kill(pid, syscall.SIGTERM)
+			// if err != nil {
+			// 	fmt.Println("read pid error", err.Error())
+			// 	return
+			// }
+		}
+		if err != nil {
+			fmt.Println(" process.Signal error", err.Error())
 			return
 		}
 		err = os.Remove("pid")
@@ -125,7 +140,7 @@ func startCmd() {
 	app.Start()
 	// 捕获kill的信号
 	sigTERM := make(chan os.Signal, 1)
-	signal.Notify(sigTERM, syscall.SIGTERM, syscall.SIGUSR1, syscall.SIGUSR2)
+	signal.Notify(sigTERM, syscall.SIGTERM)
 	// 收到信号前会一直阻塞
 
 	<-sigTERM

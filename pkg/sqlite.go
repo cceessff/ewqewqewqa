@@ -257,7 +257,7 @@ func (dao *SiteConfigDao) ForbiddenWordReplace(forbiddenWord, replaceWord, split
 }
 
 func InitTable() error {
-	db, err := sql.Open("sqlite3", "data.db")
+	db, err := sql.Open("sqlite3", "config/data.db")
 	if err != nil {
 		return err
 	}

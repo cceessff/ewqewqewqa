@@ -8,3 +8,5 @@ cmd/config/passwd
 cmd/mirror
 cmd/pid
 cmd/mirror.log
+cmd/data.db
+cmd/mirror.exe
