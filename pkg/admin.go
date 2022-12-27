@@ -79,7 +79,7 @@ func (admin *AdminModule) Initialize() {
 	admin.adminMux.Handle(prefix+"/list", admin.AuthMiddleware(admin.siteList))
 	admin.adminMux.Handle(prefix+"/edit", admin.AuthMiddleware(admin.editSite))
 
-	admin.adminMux.Handle(prefix+"/save_config", admin.AuthMiddleware(admin.ConfigSave))
+	admin.adminMux.Handle(prefix+"/save_config", admin.AuthMiddleware(admin.siteSave))
 	admin.adminMux.Handle(prefix+"/delete", admin.AuthMiddleware(admin.siteDelete))
 
 	admin.adminMux.Handle(prefix+"/import", admin.AuthMiddleware(admin.siteImport))
@@ -105,10 +105,6 @@ func (admin *AdminModule) AuthMiddleware(h func(w http.ResponseWriter, r *http.R
 		h(w, r)
 	})
 }
-func (admin *AdminModule) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	admin.adminMux.ServeHTTP(w, r)
-}
-
 func (admin *AdminModule) login(writer http.ResponseWriter, request *http.Request) {
 	if request.Method == "GET" {
 		t := template.Must(template.New("login.html").ParseFiles("admin/login.html"))
@@ -276,6 +272,7 @@ func (admin *AdminModule) siteList(writer http.ResponseWriter, request *http.Req
 		result["data"] = []SiteConfig{proxy}
 		data, _ := json.Marshal(result)
 		_, _ = writer.Write(data)
+		return
 
 	}
 	proxys, err := admin.dao.GetByPage(p, size)
@@ -302,46 +299,19 @@ func (admin *AdminModule) siteList(writer http.ResponseWriter, request *http.Req
 	_, _ = writer.Write(data)
 
 }
-func (admin *AdminModule) ConfigSave(writer http.ResponseWriter, request *http.Request) {
+func (admin *AdminModule) siteSave(writer http.ResponseWriter, request *http.Request) {
 	err := request.ParseForm()
 	if err != nil {
 		_, _ = writer.Write([]byte(`{"code":5,"msg":"请求数据出错"}`))
 	}
 
-	var needJs = false
-	if request.Form.Get("need_js") == "on" {
-		needJs = true
-	}
-	var s2t = false
-	if request.Form.Get("s2t") == "on" {
-		s2t = true
-	}
-	var cacheEnable = true
-	if request.Form.Get("cache_enable") != "on" {
-		cacheEnable = false
-	}
-	var titleReplace = false
-	if request.Form.Get("title_replace") == "on" {
-		titleReplace = true
-	}
-
-	cacheTimeStr := request.Form.Get("cache_time")
-	cacheTime, err := strconv.ParseInt(cacheTimeStr, 10, 64)
-	if err != nil || cacheTime == 0 {
-		cacheTime = 1440
-	}
 	id := request.Form.Get("id")
 	domain := request.Form.Get("domain")
 	u := request.Form.Get("url")
-	indexTitle := request.Form.Get("index_title")
-	indexKeywords := request.Form.Get("index_keywords")
-	indexDescription := request.Form.Get("index_description")
-	finds := request.Form.Get("finds")
-	replaces := request.Form.Get("replaces")
-	h1replace := request.Form.Get("h1replace")
-	baiduPushKey := request.Form.Get("baidu_push_key")
-	smPushKey := request.Form.Get("sm_push_key")
-
+	cacheTime, err := strconv.ParseInt(request.Form.Get("cache_time"), 10, 64)
+	if err != nil || cacheTime == 0 {
+		cacheTime = 1440
+	}
 	i, err := strconv.Atoi(id)
 	if err != nil {
 		_, _ = writer.Write([]byte(`{"code":2,"msg":` + err.Error() + `}`))
@@ -359,22 +329,22 @@ func (admin *AdminModule) ConfigSave(writer http.ResponseWriter, request *http.R
 		Id:               i,
 		Domain:           domain,
 		Url:              u,
-		H1Replace:        h1replace,
-		IndexTitle:       indexTitle,
-		IndexKeywords:    indexKeywords,
-		IndexDescription: indexDescription,
-		Finds:            strings.Split(finds, ";"),
-		Replaces:         strings.Split(replaces, ";"),
-		TitleReplace:     titleReplace,
-		NeedJs:           needJs,
-		S2t:              s2t,
-		CacheEnable:      cacheEnable,
+		H1Replace:        request.Form.Get("h1replace"),
+		IndexTitle:       request.Form.Get("index_title"),
+		IndexKeywords:    request.Form.Get("index_keywords"),
+		IndexDescription: request.Form.Get("index_description"),
+		Finds:            strings.Split(request.Form.Get("finds"), ";"),
+		Replaces:         strings.Split(request.Form.Get("replaces"), ";"),
+		TitleReplace:     request.Form.Get("title_replace") == "on",
+		NeedJs:           request.Form.Get("need_js") == "on",
+		S2t:              request.Form.Get("s2t") == "on",
+		CacheEnable:      request.Form.Get("cache_enable") == "on",
 		CacheTime:        cacheTime,
-		BaiduPushKey:     baiduPushKey,
-		SmPushKey:        smPushKey,
+		BaiduPushKey:     request.Form.Get("baidu_push_key"),
+		SmPushKey:        request.Form.Get("sm_push_key"),
 	}
 
-	if siteConfig.Id <= 0 {
+	if siteConfig.Id == 0 {
 		err = admin.dao.addOne(siteConfig)
 	} else {
 		err = admin.dao.UpdateById(siteConfig)
@@ -389,7 +359,7 @@ func (admin *AdminModule) ConfigSave(writer http.ResponseWriter, request *http.R
 		return
 	}
 
-	if siteConfig.Id <= 0 {
+	if siteConfig.Id == 0 {
 		_, _ = writer.Write([]byte("{\"code\":0,\"action\":\"add\"}"))
 		return
 	}
@@ -436,7 +406,7 @@ func (admin *AdminModule) siteImport(writer http.ResponseWriter, request *http.R
 	rows := f.GetRows("Sheet1")
 	var configs = make([]SiteConfig, 0)
 	for k, row := range rows {
-		if k <= 0 {
+		if k == 0 {
 			continue
 		}
 		if _, err := url.Parse(row[1]); err != nil {
@@ -479,7 +449,7 @@ func (admin *AdminModule) siteImport(writer http.ResponseWriter, request *http.R
 	for _, data := range configs {
 		err := admin.app.MakeSite(&data)
 		if err != nil {
-			log.Println(err.Error())
+			admin.app.Logger.Error(err.Error())
 		}
 	}
 	_, _ = writer.Write([]byte("{\"code\":0}"))

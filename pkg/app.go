@@ -49,7 +49,7 @@ func (app *App) Start() {
 	l = netutil.LimitListener(l, 256*2048)
 	app.Server = &http.Server{Handler: app}
 	admin := NewAdmin(app)
-	app.AdminServer = &http.Server{Handler: admin, Addr: ":" + app.AdminPort}
+	app.AdminServer = &http.Server{Handler: admin.adminMux, Addr: ":" + app.AdminPort}
 	go func() {
 		if err := app.Serve(l); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			app.Logger.Fatalln("监听错误" + err.Error())
@@ -94,6 +94,9 @@ func (app *App) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 		return
 	}
 	site := item.(*Site)
+	if site.Schema == "" {
+		site.Schema = request.Header.Get("scheme")
+	}
 	site.Route(writer, request)
 
 }

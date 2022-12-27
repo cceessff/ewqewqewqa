@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"math/rand"
 	"net"
 	"net/http"
@@ -43,26 +42,21 @@ func singleJoiningSlash(a, b string) string {
 }
 func isIndexPage(u *url.URL) bool {
 	return (u.Path == "" ||
-		u.Path == "/" ||
-		strings.ToLower(u.Path) == "/index.php" ||
-		strings.ToLower(u.Path) == "/index.asp" ||
-		strings.ToLower(u.Path) == "/index.jsp" ||
-		strings.ToLower(u.Path) == "/index.htm" ||
-		strings.ToLower(u.Path) == "/index.html" ||
-		strings.ToLower(u.Path) == "/index.shtml")
+		strings.EqualFold(u.Path, "/") ||
+		strings.EqualFold(u.Path, "/index.php") ||
+		strings.EqualFold(u.Path, "/index.asp") ||
+		strings.EqualFold(u.Path, "/index.jsp") ||
+		strings.EqualFold(u.Path, "/index.htm") ||
+		strings.EqualFold(u.Path, "/index.html") ||
+		strings.EqualFold(u.Path, "/index.shtml"))
 
 }
-func GBk2UTF8(content []byte, contentType string) string {
+func GBk2UTF8(content []byte, contentType string) []byte {
 	e, name, _ := charset.DetermineEncoding(content, contentType)
 	if strings.ToLower(name) != "utf-8" {
 		content, _ = e.NewDecoder().Bytes(content)
 	}
-	var contentStr = string(content)
-	gbkArr := []string{"gb2312", "gbk", "GBK", "GB2312"}
-	for _, g := range gbkArr {
-		contentStr = strings.Replace(contentStr, g, "utf-8", -1)
-	}
-	return contentStr
+	return content
 }
 
 func newProxy(target *url.URL, ipList []net.IP) *httputil.ReverseProxy {
@@ -104,13 +98,12 @@ func newProxy(target *url.URL, ipList []net.IP) *httputil.ReverseProxy {
 	}
 	return &httputil.ReverseProxy{Director: director, Transport: transport}
 }
-func GetIPList() []net.IP {
+func GetIPList() ([]net.IP, error) {
+	ipList := make([]net.IP, 0)
 	addrs, err := net.InterfaceAddrs()
 	if err != nil {
-		log.Println("获取本地IP错误" + err.Error())
-		return nil
+		return ipList, err
 	}
-	ipList := make([]net.IP, 0)
 	for _, address := range addrs {
 		// 检查ip地址判断是否回环地址
 		ipNet, ok := address.(*net.IPNet)
@@ -118,7 +111,7 @@ func GetIPList() []net.IP {
 			ipList = append(ipList, ipNet.IP)
 		}
 	}
-	return ipList
+	return ipList, nil
 }
 
 func isPublicIP(IP net.IP) bool {

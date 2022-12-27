@@ -118,11 +118,15 @@ func startCmd() {
 		logger.Error("DAO GetAll", err.Error())
 		return
 	}
+	ipList, err := pkg.GetIPList()
+	if err != nil {
+		logger.Error("GetIPList", err.Error())
+	}
 	app := pkg.App{
 		AppConfig: &appConfig,
 		Dao:       dao,
 		S2T:       s2t,
-		IpList:    pkg.GetIPList(),
+		IpList:    ipList,
 		Logger:    logger,
 	}
 	for _, siteConfig := range siteConfigs {

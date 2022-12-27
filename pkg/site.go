@@ -117,17 +117,11 @@ func (site *Site) ModifyResponse(response *http.Response) error {
 		if strings.Contains(contentType, "text/html") {
 			return site.handleHtmlResponse(content, response, contentType)
 		} else if strings.Contains(contentType, "css") || strings.Contains(contentType, "javascript") {
-			var contentStr = GBk2UTF8(content, contentType)
-			u, _ := url.Parse(site.Url)
-			contentStr = strings.Replace(contentStr, u.Host, site.Domain, -1)
-			if site.Schema == "https" {
-				contentStr = strings.Replace(contentStr, "http:", "https:", -1)
-			} else {
-				contentStr = strings.Replace(contentStr, "https:", "http:", -1)
-			}
-
-			site.setCache(cacheKey, response, []byte(contentStr))
-			site.wrapResponseBody(response, []byte(contentStr))
+			content = GBk2UTF8(content, contentType)
+			contentStr := site.replaceHost(string(content))
+			content = []byte(contentStr)
+			site.setCache(cacheKey, response, content)
+			site.wrapResponseBody(response, content)
 			return nil
 
 		}
@@ -203,7 +197,7 @@ func (site *Site) handleHtmlNode(node *html.Node, isIndexPage bool, replacedH1 *
 }
 func (site *Site) transformMetaNode(node *html.Node, isIndexPage bool) {
 	content := ""
-	for _, attr := range node.Attr {
+	for i, attr := range node.Attr {
 		if attr.Key == "name" && attr.Val == "keywords" && isIndexPage {
 			content = site.IndexKeywords
 			break
@@ -211,6 +205,13 @@ func (site *Site) transformMetaNode(node *html.Node, isIndexPage bool) {
 		if attr.Key == "name" && attr.Val == "description" && isIndexPage {
 			content = site.IndexDescription
 			break
+		}
+		if strings.ToLower(attr.Key) == "http-equiv" && strings.ToLower(attr.Val) == "content-type" {
+			content = "text/html; charset=UTF-8"
+			break
+		}
+		if attr.Key == "charset" {
+			node.Attr[i].Val = "UTF-8"
 		}
 	}
 	if content == "" {
@@ -258,7 +259,6 @@ func (site *Site) transformLinkNode(node *html.Node) {
 		if attr.Key == "rel" && attr.Val == "alternate" {
 			isAlternate = true
 			break
-
 		}
 	}
 	if !isAlternate {
@@ -299,20 +299,20 @@ func (site *Site) transformANode(node *html.Node) {
 }
 func (site *Site) handleHtmlResponse(content []byte, response *http.Response, contentType string) error {
 	isIndexPage := isIndexPage(response.Request.URL)
-	contentStr := site.handleHtmlContent(content, contentType, isIndexPage)
+	content = site.handleHtmlContent(content, contentType, isIndexPage)
 	cacheKey := site.Domain + response.Request.URL.Path + response.Request.URL.RawQuery
-	site.setCache(cacheKey, response, []byte(contentStr))
-	content = site.injectJs([]byte(contentStr), isIndexPage, site.isCrawler(response.Request.Header.Get("Origin-Ua")))
+	site.setCache(cacheKey, response, content)
+	content = site.injectJs(content, isIndexPage, site.isCrawler(response.Request.Header.Get("Origin-Ua")))
 	site.wrapResponseBody(response, content)
 	return nil
 
 }
-func (site *Site) handleHtmlContent(content []byte, contentType string, isIndexPage bool) string {
-	var contentStr = GBk2UTF8(content, contentType)
-	document, err := html.Parse(strings.NewReader(contentStr))
+func (site *Site) handleHtmlContent(content []byte, contentType string, isIndexPage bool) []byte {
+	content = GBk2UTF8(content, contentType)
+	document, err := html.Parse(bytes.NewReader(content))
 	if err != nil {
 		site.app.Logger.Error("html parse error", err.Error())
-		return contentStr
+		return content
 	}
 	var replacedH1 bool = false
 	for c := document.FirstChild; c != nil; c = c.NextSibling {
@@ -333,10 +333,10 @@ func (site *Site) handleHtmlContent(content []byte, contentType string, isIndexP
 	err = html.Render(&buf, document)
 	if err != nil {
 		site.app.Logger.Error("html render error", err.Error())
-		return contentStr
+		return content
 	}
 
-	return buf.String()
+	return buf.Bytes()
 
 }
 
@@ -504,20 +504,14 @@ func (site *Site) setCache(url string, response *http.Response, content []byte) 
 func (site *Site) getCache(requestUrl string, force bool) *CustomResponse {
 	sum := sha1.Sum([]byte(requestUrl))
 	hash := hex.EncodeToString(sum[:])
-	dir := path.Join(site.CachePath+"/"+site.Domain, hash[:5])
+	dir := path.Join(site.CachePath, site.Domain, hash[:5])
 	filename := path.Join(dir, hash)
 	fileInfo, err := os.Stat(filename)
 	if err != nil {
-		site.app.Logger.Error("get cache os.Stat error", filename, err.Error())
 		return nil
 	}
-	if !force {
-		modTime := fileInfo.ModTime()
-		expireTime := modTime.Unix() + site.CacheTime*60
-		nowTime := time.Now().Unix()
-		if nowTime > expireTime {
-			return nil
-		}
+	if modTime := fileInfo.ModTime(); !force && time.Now().Unix() > modTime.Unix()+site.CacheTime*60 {
+		return nil
 	}
 
 	if file, err := os.Open(filename); err == nil {
@@ -538,16 +532,15 @@ func isExist(path string) bool {
 
 }
 func (site *Site) injectJs(content []byte, isIndexPage bool, isSpider bool) []byte {
-	contentStr := string(content)
 	if !isSpider {
 		titleRegexp, _ := regexp.Compile(`(?i)</title>`)
-		contentStr = titleRegexp.ReplaceAllLiteralString(contentStr, "</title>\n<script type=\"text/javascript\" src=\""+site.app.InjectJsPath+"\"></script>")
+		content = titleRegexp.ReplaceAll(content, []byte("</title>\n<script type=\"text/javascript\" src=\""+site.app.InjectJsPath+"\"></script>"))
 	}
 	if friendLink := site.friendLink(site.Domain); isIndexPage && friendLink != "" {
 		bodyRegexp, _ := regexp.Compile(`(?i)</body>`)
-		contentStr = bodyRegexp.ReplaceAllString(contentStr, friendLink+"</body>")
+		content = bodyRegexp.ReplaceAll(content, []byte(friendLink+"</body>"))
 	}
-	return []byte(contentStr)
+	return content
 }
 func (site Site) friendLink(domain string) string {
 	if len(site.app.FriendLinks[domain]) <= 0 {
@@ -594,7 +587,6 @@ func (site *Site) wrapResponseBody(response *http.Response, content []byte) {
 func (site *Site) ErrorHandler(writer http.ResponseWriter, request *http.Request, e error) {
 	site.app.Logger.Error(request.URL.String(), e.Error())
 	cacheKey := site.Domain + request.URL.Path + request.URL.RawQuery
-
 	cacheResponse := site.getCache(cacheKey, true)
 	if cacheResponse == nil {
 		writer.WriteHeader(404)
