@@ -3,12 +3,8 @@ package pkg
 import (
 	"crypto/sha256"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"html/template"
-	"io/ioutil"
-	"log"
-	"math/rand"
 	"net/http"
 	"net/url"
 	"os"
@@ -27,37 +23,6 @@ type AdminModule struct {
 	prefix   string
 }
 
-func genUserAndPass() (string, string) {
-	chars := []rune("abcdefghijklmnopqrstuvwxyz")
-	user := ""
-	for i := 0; i < 8; i++ {
-		user = user + string(chars[rand.Intn(len(chars))])
-	}
-	chars = []rune("abcdefghijklmnopqrstuvwxyz1234567890")
-	pass := ""
-	for i := 0; i < 12; i++ {
-		pass = pass + string(chars[rand.Intn(len(chars))])
-	}
-	return user, pass
-}
-func makeAdminUser() (string, string, error) {
-	passBytes, err := ioutil.ReadFile("config/passwd")
-	if err != nil || len(passBytes) == 0 {
-		userName, password := genUserAndPass()
-		err = ioutil.WriteFile("config/passwd", []byte(userName+":"+password), os.ModePerm)
-		if err != nil {
-			return "", "", errors.New("生成用户文件错误" + err.Error())
-		}
-		return userName, password, nil
-
-	}
-	userAndPass := strings.Split(string(passBytes), ":")
-	if len(userAndPass) != 2 {
-		return "", "", errors.New("用户文件内容错误")
-	}
-	return userAndPass[0], userAndPass[1], nil
-}
-
 func NewAdmin(app *App) *AdminModule {
 	userName, password, err := makeAdminUser()
 	if err != nil {
@@ -68,10 +33,14 @@ func NewAdmin(app *App) *AdminModule {
 	admin.Initialize()
 	return admin
 }
+
 func (admin *AdminModule) Initialize() {
 	fileHandler := http.FileServer(http.Dir("admin"))
 	admin.adminMux = http.NewServeMux()
 	prefix := admin.prefix
+	admin.adminMux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, admin.prefix, http.StatusMovedPermanently)
+	}))
 	admin.adminMux.Handle("/static/", fileHandler)
 
 	admin.adminMux.Handle(prefix+"/login", admin.AuthMiddleware(admin.login))
@@ -117,7 +86,6 @@ func (admin *AdminModule) login(writer http.ResponseWriter, request *http.Reques
 	err := request.ParseForm()
 	if err != nil {
 		admin.app.Logger.Error("login ParseForm error", err.Error())
-		log.Println(err.Error())
 		writer.WriteHeader(404)
 		_, _ = writer.Write([]byte(`{"code":5,"msg":"请求出错"}`))
 		return

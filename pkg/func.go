@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -219,4 +220,34 @@ XzFBxZbhjXaZkaO2CWTHLwcKtSCCd3PkXNCRWQeHM4OelRZJajKSxwcWWTqbusGC
 		return "", errors.New("认证失败，无法解码," + err.Error())
 	}
 	return string(data), nil
+}
+func genUserAndPass() (string, string) {
+	chars := []rune("abcdefghijklmnopqrstuvwxyz")
+	user := ""
+	for i := 0; i < 8; i++ {
+		user = user + string(chars[rand.Intn(len(chars))])
+	}
+	chars = []rune("abcdefghijklmnopqrstuvwxyz1234567890")
+	pass := ""
+	for i := 0; i < 12; i++ {
+		pass = pass + string(chars[rand.Intn(len(chars))])
+	}
+	return user, pass
+}
+func makeAdminUser() (string, string, error) {
+	passBytes, err := ioutil.ReadFile("config/passwd")
+	if err != nil || len(passBytes) == 0 {
+		userName, password := genUserAndPass()
+		err = ioutil.WriteFile("config/passwd", []byte(userName+":"+password), os.ModePerm)
+		if err != nil {
+			return "", "", errors.New("生成用户文件错误" + err.Error())
+		}
+		return userName, password, nil
+
+	}
+	userAndPass := strings.Split(string(passBytes), ":")
+	if len(userAndPass) != 2 {
+		return "", "", errors.New("用户文件内容错误")
+	}
+	return userAndPass[0], userAndPass[1], nil
 }
