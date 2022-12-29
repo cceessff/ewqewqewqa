@@ -64,7 +64,7 @@
                                         data:data.field,
                                         dataType:'JSON',
                                         success:function(res){
-                                            if(res.code==0){
+                                            if(res.code===0){
                                                 layer.alert("替换成功");
                                             } else{
                                                 layer.alert("替换失败："+res.msg);

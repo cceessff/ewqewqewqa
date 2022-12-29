@@ -71,7 +71,7 @@
                                         <div class="layui-input-inline" style="width: 500px">
                                             {{$finds:= .proxy_config.Finds}}
                                             <input type="text" name="finds" required lay-verify="required"
-                                                value="{{join $finds " ;"}}" placeholder="请输入被替换词" autocomplete="off"
+                                                value="{{join $finds ";"}}" placeholder="请输入被替换词" autocomplete="off"
                                                 class="layui-input">
                                         </div>
                                         <div class="layui-form-mid layui-word-aux">每个词用 ; 号隔开</div>
@@ -82,7 +82,7 @@
                                             {{$replaces:= .proxy_config.Replaces}}
     
                                             <input type="text" name="replaces" required lay-verify="required"
-                                                value="{{join $replaces " ;"}}" placeholder="请输入替换词" autocomplete="off"
+                                                value="{{join $replaces ";"}}" placeholder="请输入替换词" autocomplete="off"
                                                 class="layui-input">
                                         </div>
                                         <div class="layui-form-mid layui-word-aux">每个词用 ; 号隔开</div>
@@ -181,15 +181,13 @@
                                             data: data.field,
                                             dataType: 'JSON',
                                             success: function (res) {
-                                                if (res.code = '0') {
+                                                if (res.code === 0) {
                                                     if (res.action == "add") {
                                                         layer.alert("添加成功")
                                                         window.location.href = "{{.admin_uri}}";
                                                     } else {
                                                         layer.alert("保存成功")
                                                     }
-
-
                                                 } else {
                                                     layer.alert("保存失败")
                                                 }

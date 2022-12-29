@@ -22,6 +22,10 @@ type AdminModule struct {
 	Password string
 	prefix   string
 }
+type AdminUser struct {
+	UserName string `json:"user_name"`
+	Password string `json:"password"`
+}
 
 func NewAdmin(app *App) *AdminModule {
 	userName, password, err := makeAdminUser()
@@ -41,8 +45,10 @@ func (admin *AdminModule) Initialize() {
 	admin.adminMux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, admin.prefix, http.StatusMovedPermanently)
 	}))
+	admin.adminMux.Handle("/favicon.ico", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(404)
+	}))
 	admin.adminMux.Handle("/static/", fileHandler)
-
 	admin.adminMux.Handle(prefix+"/login", admin.AuthMiddleware(admin.login))
 	admin.adminMux.Handle(prefix, admin.AuthMiddleware(admin.index))
 	admin.adminMux.Handle(prefix+"/list", admin.AuthMiddleware(admin.siteList))
@@ -83,25 +89,23 @@ func (admin *AdminModule) login(writer http.ResponseWriter, request *http.Reques
 		}
 		return
 	}
-	err := request.ParseForm()
+	var adminUser AdminUser
+	err := json.NewDecoder(request.Body).Decode(&adminUser)
 	if err != nil {
 		admin.app.Logger.Error("login ParseForm error", err.Error())
-		writer.WriteHeader(404)
-		_, _ = writer.Write([]byte(`{"code":5,"msg":"请求出错"}`))
+		_, _ = writer.Write([]byte(`{"code":5,"msg":"参数错误"}`))
 		return
 	}
-	userName := request.PostFormValue("user_name")
-	password := request.PostFormValue("password")
-	if userName == "" || password == "" || admin.UserName != userName || admin.Password != password {
-		http.Redirect(writer, request, admin.prefix+"/login", http.StatusMovedPermanently)
+
+	if adminUser.UserName == "" || adminUser.Password == "" || admin.UserName != adminUser.UserName || admin.Password != adminUser.Password {
+		_, _ = writer.Write([]byte(`{"code":4,"msg":"用户名或密码错误"}`))
 		return
 	}
-	sum := sha256.New().Sum([]byte(userName + password))
+	sum := sha256.New().Sum([]byte(adminUser.UserName + adminUser.Password))
 	loginSign := fmt.Sprintf("%x", sum)
 	cookie := &http.Cookie{Name: "login_cert", Value: loginSign, HttpOnly: true, Path: "/"}
 	http.SetCookie(writer, cookie)
-	http.Redirect(writer, request, admin.prefix, http.StatusMovedPermanently)
-
+	_, _ = writer.Write([]byte(`{"code":0,"msg":"登录成功"}`))
 }
 func (admin *AdminModule) MulDel(writer http.ResponseWriter, request *http.Request) {
 	err := request.ParseForm()
