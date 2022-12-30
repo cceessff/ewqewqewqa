@@ -343,6 +343,10 @@ func (admin *AdminModule) siteDelete(writer http.ResponseWriter, request *http.R
 	q := request.URL.Query()
 	id := q.Get("id")
 	domain := q.Get("domain")
+	if domain == "" {
+		_, _ = writer.Write([]byte(`{"code":1,"msg":"域名不能为空"}`))
+		return
+	}
 	i, err := strconv.Atoi(id)
 	if err != nil {
 		_, _ = writer.Write([]byte(`{"code":1,"msg":` + err.Error() + `}`))
@@ -354,6 +358,7 @@ func (admin *AdminModule) siteDelete(writer http.ResponseWriter, request *http.R
 		return
 	}
 	admin.app.Sites.Delete(domain)
+	admin.deleteCache(domain)
 	_, _ = writer.Write([]byte("{\"code\":0}"))
 
 }
@@ -429,11 +434,18 @@ func (admin *AdminModule) siteImport(writer http.ResponseWriter, request *http.R
 func (admin *AdminModule) DeleteCache(writer http.ResponseWriter, request *http.Request) {
 	q := request.URL.Query()
 	domain := q.Get("domain")
+	if domain == "" {
+		_, _ = writer.Write([]byte(`{"code":5,"msg":"域名不能为空"}`))
+		return
+	}
 	admin.deleteCache(domain)
-	_, _ = writer.Write([]byte("{\"code\":0}"))
+	_, _ = writer.Write([]byte(`{"code":0}`))
 
 }
 func (admin *AdminModule) deleteCache(domain string) {
+	if domain == "" {
+		return
+	}
 	dir := admin.app.CachePath + "/" + domain
 	if !isExist(dir) {
 		return

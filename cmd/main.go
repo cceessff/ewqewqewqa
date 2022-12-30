@@ -91,7 +91,8 @@ func startCmd() {
 		c.UseJSON = true
 	})
 	logger := slog.NewWithHandlers(handler)
-
+	defer logger.Close()
+	logger.Info("start log")
 	err := pkg.InitTable()
 	if err != nil {
 		logger.Error("init table error", err.Error())
@@ -150,4 +151,5 @@ func startCmd() {
 	<-sigTERM
 	app.Stop()
 	logger.Info("exit")
+
 }
