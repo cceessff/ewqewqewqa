@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -30,7 +31,7 @@ type AppConfig struct {
 }
 type App struct {
 	*AppConfig
-	Dao *SiteConfigDao
+	Dao *Dao
 	*http.Server
 	AdminServer *http.Server
 	Sites       sync.Map
@@ -38,6 +39,8 @@ type App struct {
 	IpList      []net.IP
 	ExpireDate  string
 	Logger      *slog.Logger
+	RecordChann chan *Record
+	Finish      chan int
 }
 
 func (app *App) Start() {
@@ -63,6 +66,17 @@ func (app *App) Start() {
 		}
 	}()
 
+	go func() {
+		for record := range app.RecordChann {
+			err := app.Dao.AddRecord(record)
+			if err != nil {
+				app.Logger.Error(err.Error())
+			}
+		}
+		app.Finish <- 1
+
+	}()
+
 }
 func (app *App) Stop() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
@@ -74,6 +88,7 @@ func (app *App) Stop() {
 	if err != nil {
 		app.Logger.Error("shutdown error" + err.Error())
 	}
+	close(app.RecordChann)
 	defer cancel()
 }
 func (app *App) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
@@ -110,4 +125,25 @@ func (app *App) Auth() error {
 func (app *App) MakeSite(siteConfig *SiteConfig) error {
 	return NewSite(siteConfig, app)
 
+}
+func (app *App) AddRecord(domain, path, userAgent string) {
+
+	record := &Record{
+		Domain:      domain,
+		Path:        path,
+		UserAgent:   userAgent,
+		Spider:      app.getSpiderName(userAgent),
+		CreatedTime: time.Now().Unix(),
+	}
+	app.RecordChann <- record
+}
+func (app *App) getSpiderName(userAgent string) string {
+	userAgent = strings.ToLower(userAgent)
+	for _, value := range app.Spider {
+		spider := strings.ToLower(value)
+		if strings.Contains(userAgent, spider) {
+			return spider
+		}
+	}
+	return ""
 }

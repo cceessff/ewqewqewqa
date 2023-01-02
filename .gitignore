@@ -10,3 +10,4 @@ cmd/pid
 cmd/mirror.log
 cmd/data.db
 cmd/mirror.exe
+cmd/cmd.zip

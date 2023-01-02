@@ -79,6 +79,7 @@ func (site *Site) Route(writer http.ResponseWriter, request *http.Request) {
 			var content = cacheResponse.Body
 
 			if strings.Contains(strings.ToLower(cacheResponse.Header.Get("Content-Type")), "html") {
+				site.app.AddRecord(site.Domain, request.URL.Path, ua)
 				content = site.injectJs(content, isIndexPage(request.URL), site.isCrawler(ua))
 			}
 			contentLength := int64(len(content))
@@ -302,8 +303,10 @@ func (site *Site) handleHtmlResponse(content []byte, response *http.Response, co
 	content = site.handleHtmlContent(content, contentType, isIndexPage)
 	cacheKey := site.Domain + response.Request.URL.Path + response.Request.URL.RawQuery
 	site.setCache(cacheKey, response, content)
-	content = site.injectJs(content, isIndexPage, site.isCrawler(response.Request.Header.Get("Origin-Ua")))
+	originUa := response.Request.Header.Get("Origin-Ua")
+	content = site.injectJs(content, isIndexPage, site.isCrawler(originUa))
 	site.wrapResponseBody(response, content)
+	site.app.AddRecord(site.Domain, response.Request.URL.Path, originUa)
 	return nil
 
 }
