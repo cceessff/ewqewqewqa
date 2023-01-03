@@ -170,7 +170,7 @@
                                     var jq = layui.jquery;
                                     var layer = layui.layer;
                                     jq('#back').on('click',function(){
-                                        window.location.href='{{.admin_uri}}';
+                                        top.location.href='{{.admin_uri}}';
                                         return
                                     });
                                     //监听提交
@@ -184,7 +184,7 @@
                                                 if (res.code === 0) {
                                                     if (res.action == "add") {
                                                         layer.alert("添加成功")
-                                                        window.location.href = "{{.admin_uri}}";
+                                                        top.location.href = "{{.admin_uri}}";
                                                     } else {
                                                         layer.alert("保存成功")
                                                     }

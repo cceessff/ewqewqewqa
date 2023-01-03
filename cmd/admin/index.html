@@ -15,6 +15,7 @@
             <!-- 头部区域（可配合layui 已有的水平导航） -->
             <ul class="layui-nav layui-layout-left">
                 <!-- 移动端显示 -->
+                <span style="font-size: 1rem;line-height: 60px;">过期时间:</span><span style="color: red;font-size: 1rem;">{{.ExpireDate}}</span>
 
             </ul>
             <ul class="layui-nav layui-layout-right">
@@ -47,7 +48,7 @@
 
         <div class="layui-body">
             <!-- 内容主体区域 -->
-                <iframe src="" style="height: 100%;width: 100%; display: block;" frameborder="0"
+                <iframe src="{{.admin_uri}}/site" style="height: 100%;width: 100%; display: block;" frameborder="0"
                  id="appiframe">
                 </iframe>
             
@@ -58,19 +59,16 @@
             底部固定区域
         </div>
     </div>
-    <script src="/static/layui/layui.all.js"></script>
+    <script src="/static/layui/layui.js"></script>
     <script>
         //JS 
-        layui.use(['element', 'layer', 'util'], function () {
+        layui.use(['element', 'layer','jquery'], function () {
             const element = layui.element
-                , layer = layui.layer
                 , $ = layui.$;
             element.on("nav(admin-side)", (elem) => {
                 $('#appiframe').attr("src", elem.data('href'));
 
             });
-
-
 
         });
     </script>

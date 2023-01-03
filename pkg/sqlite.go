@@ -294,7 +294,6 @@ func (dao *Dao) recordList(domain string, startTime int64, endTime int64, page i
 	if where != "" {
 		querySql = fmt.Sprintf("select * from record %s limit %d,%d", where, start, limit)
 	}
-
 	rows, err = dao.db.Query(querySql)
 
 	if err != nil {

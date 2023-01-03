@@ -187,13 +187,13 @@ func (admin *AdminModule) recordList(writer http.ResponseWriter, request *http.R
 		limit, _ = strconv.Atoi(limitParam)
 	}
 	if startTimeParam := params.Get("start_time"); startTimeParam != "" {
-		timeResult, err := time.Parse("2006-01-02 15:04:05", startTimeParam)
+		timeResult, err := time.ParseInLocation("2006-01-02 15:04:05", startTimeParam, time.Local)
 		if err == nil {
 			startTime = timeResult.Unix()
 		}
 	}
 	if endTimeParam := params.Get("end_time"); endTimeParam != "" {
-		timeResult, err := time.Parse("2006-01-02 15:04:05", endTimeParam)
+		timeResult, err := time.ParseInLocation("2006-01-02 15:04:05", endTimeParam, time.Local)
 		if err == nil {
 			endTime = timeResult.Unix()
 		}

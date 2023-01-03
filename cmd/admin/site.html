@@ -54,10 +54,6 @@
                                         <input class="layui-input" name="domain" id="domain-input" autocomplete="off">
                                     </div>
                                     <button class="layui-btn" data-type="reload">搜索</button>
-
-                                    <div style="float: right;">
-                                        <span>过期时间:</span><span style="color: red;">{{.ExpireDate}}</span>
-                                    </div>
                                 </div>
                             </div>
                             <div class="layui-card-body">
@@ -81,8 +77,6 @@
             <button class="layui-btn layui-btn-sm" lay-event="add_config">添加</button>
             <button class="layui-btn layui-btn-sm" lay-event="import">导入(.xlsx)</button>
             <button class="layui-btn layui-btn-sm" lay-event="multi_del">批量删除</button>
-            <button class="layui-btn layui-btn-sm" lay-event="forbidden_words">禁词替换</button>
-
         </div>
     </script>
         <script>
@@ -145,13 +139,10 @@
 
                 table.on('toolbar(site-list-table)', function (obj) {
                     if (obj.event == "add_config") {
-                        window.location.href = "{{.admin_uri}}/edit"
+                        top.location.href = "{{.admin_uri}}/edit"
                         return;
                     }
-                    if (obj.event == "forbidden_words") {
-                        window.location.href = "{{.admin_uri}}/forbidden_words";
-                        return;
-                    }
+                   
                     if (obj.event == "import") {
                         jq("#import").click();
                         return;
@@ -214,7 +205,7 @@
 
                 table.on('tool(site-list-table)', function (obj) {
                     if (obj.event == 'edit') {
-                        window.location.href = "{{.admin_uri}}/edit?url=" + obj.data.domain;
+                        top.location.href = "{{.admin_uri}}/edit?url=" + obj.data.domain;
                         return;
                     } 
                      if (obj.event == "delete") {

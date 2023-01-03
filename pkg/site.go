@@ -79,8 +79,11 @@ func (site *Site) Route(writer http.ResponseWriter, request *http.Request) {
 			var content = cacheResponse.Body
 
 			if strings.Contains(strings.ToLower(cacheResponse.Header.Get("Content-Type")), "html") {
-				site.app.AddRecord(site.Domain, request.URL.Path, ua)
-				content = site.injectJs(content, isIndexPage(request.URL), site.isCrawler(ua))
+				isSpider := site.isCrawler(ua)
+				if isSpider {
+					site.app.AddRecord(site.Domain, request.URL.Path, ua)
+				}
+				content = site.injectJs(content, isIndexPage(request.URL), isSpider)
 			}
 			contentLength := int64(len(content))
 			writer.Header().Set("Content-Length", strconv.FormatInt(contentLength, 10))
@@ -304,9 +307,12 @@ func (site *Site) handleHtmlResponse(content []byte, response *http.Response, co
 	cacheKey := site.Domain + response.Request.URL.Path + response.Request.URL.RawQuery
 	site.setCache(cacheKey, response, content)
 	originUa := response.Request.Header.Get("Origin-Ua")
-	content = site.injectJs(content, isIndexPage, site.isCrawler(originUa))
+	isSpider := site.isCrawler(originUa)
+	content = site.injectJs(content, isIndexPage, isSpider)
 	site.wrapResponseBody(response, content)
-	site.app.AddRecord(site.Domain, response.Request.URL.Path, originUa)
+	if isSpider {
+		site.app.AddRecord(site.Domain, response.Request.URL.Path, originUa)
+	}
 	return nil
 
 }

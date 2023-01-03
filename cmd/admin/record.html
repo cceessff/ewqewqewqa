@@ -73,9 +73,6 @@
             </div>
         </div>
         <script src="/static/layui/layui.js"></script>
-        <script type="text/html" id="toolBar">
-            <button type="button" lay-event="delete" class="layui-btn layui-btn-xs layui-btn-danger">删除</button>
-        </script>
         <script>
             layui.use(['table', 'jquery', 'layer', 'laydate'], function () {
                 const table = layui.table;
@@ -88,24 +85,28 @@
                 table.render({
                     elem: '#record-table'
                     , url: '{{.admin_uri}}/recordList'
-                    , toolbar: "#topToolBar"
                     , title: '访问记录列表'
                     , totalRow: true
                     , cellMinWidth: 80
                     , cols: [[
-                        { field: 'id', title: 'ID', fixed: 'left', unresize: true }
-                        , { field: 'domain', title: '域名' }
-                        , { field: 'path', title: '路径', }
-                        , { field: 'spider', title: '蜘蛛', }
-                        , { field: 'user_agent', title: 'UA', }
-                        , { field: 'created_time', title: '访问时间' }
-                        , { title: "操作", align: 'center', toolbar: '#toolBar' }
+                        { field: 'id', title: 'ID', fixed: 'left', unresize: true,width:80 }
+                        , { field: 'domain', title: '域名',width:160 }
+                        , { field: 'path', title: '路径',width:160 }
+                        , { field: 'spider', title: '蜘蛛', width:80}
+                        , { field: 'user_agent', title: 'UA'}
+                        , { field: 'created_time', title: '访问时间' ,width:160}
                     ]]
                     , parseData: function (res) {
                         if (res.data) {
                             for (let i = 0; i < res.data.length; i++) {
-                                let date = new Date(res.data[i].created_time * 1000)
-                                let formmaterStr = date.getFullYear() + "-" + (date.getMonth() + 1) + "-" + date.getDate() + " " + date.getHours() + ":" + date.getMinutes() + ":" + date.getSeconds();
+                                let date = new Date(res.data[i].created_time * 1000);
+                                let year=date.getFullYear();
+                                let month=(date.getMonth() + 1)<10?'0'+(date.getMonth() + 1):(date.getMonth() + 1);
+                                let day=date.getDate()<10?'0'+date.getDate():date.getDate;
+                                let hours=date.getHours()<10?'0'+date.getHours():date.getHours();
+                                let minutes=date.getMinutes()<10?'0'+date.getMinutes():date.getMinutes();
+                                let seconds=date.getSeconds()<10?'0'+date.getSeconds():date.getSeconds();
+                                let formmaterStr = year + "-" + month + "-" + day + " " + hours + ":" + minutes + ":" + seconds;
                                 res.data[i].created_time = formmaterStr;
                             }
                         }
