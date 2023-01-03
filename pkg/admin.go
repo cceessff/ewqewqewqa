@@ -10,12 +10,13 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/360EntSecGroup-Skylar/excelize"
 )
 
 type AdminModule struct {
-	dao      *SiteConfigDao
+	dao      *Dao
 	app      *App
 	adminMux *http.ServeMux
 	UserName string
@@ -51,6 +52,9 @@ func (admin *AdminModule) Initialize() {
 	admin.adminMux.Handle("/static/", fileHandler)
 	admin.adminMux.Handle(prefix+"/login", admin.AuthMiddleware(admin.login))
 	admin.adminMux.Handle(prefix, admin.AuthMiddleware(admin.index))
+	admin.adminMux.Handle(prefix+"/site", admin.AuthMiddleware(admin.site))
+	admin.adminMux.Handle(prefix+"/record", admin.AuthMiddleware(admin.record))
+	admin.adminMux.Handle(prefix+"/recordList", admin.AuthMiddleware(admin.recordList))
 	admin.adminMux.Handle(prefix+"/list", admin.AuthMiddleware(admin.siteList))
 	admin.adminMux.Handle(prefix+"/edit", admin.AuthMiddleware(admin.editSite))
 
@@ -59,7 +63,7 @@ func (admin *AdminModule) Initialize() {
 
 	admin.adminMux.Handle(prefix+"/import", admin.AuthMiddleware(admin.siteImport))
 	admin.adminMux.Handle(prefix+"/delete_cache", admin.AuthMiddleware(admin.DeleteCache))
-	admin.adminMux.Handle(prefix+"/mul_del", admin.AuthMiddleware(admin.MulDel))
+	admin.adminMux.Handle(prefix+"/multi_del", admin.AuthMiddleware(admin.multiDel))
 	admin.adminMux.Handle(prefix+"/forbidden_words", admin.AuthMiddleware(admin.forbiddenWords))
 
 }
@@ -107,7 +111,7 @@ func (admin *AdminModule) login(writer http.ResponseWriter, request *http.Reques
 	http.SetCookie(writer, cookie)
 	_, _ = writer.Write([]byte(`{"code":0,"msg":"登录成功"}`))
 }
-func (admin *AdminModule) MulDel(writer http.ResponseWriter, request *http.Request) {
+func (admin *AdminModule) multiDel(writer http.ResponseWriter, request *http.Request) {
 	err := request.ParseForm()
 	if err != nil {
 		admin.app.Logger.Error("MulDel ParseForm error", err.Error())
@@ -134,7 +138,7 @@ func (admin *AdminModule) MulDel(writer http.ResponseWriter, request *http.Reque
 
 }
 func (admin *AdminModule) index(w http.ResponseWriter, request *http.Request) {
-	t, err := template.ParseFiles("admin/admin.html")
+	t, err := template.ParseFiles("admin/index.html")
 	if err != nil {
 		admin.app.Logger.Error("index template error", err.Error())
 		return
@@ -144,6 +148,82 @@ func (admin *AdminModule) index(w http.ResponseWriter, request *http.Request) {
 		admin.app.Logger.Error("index template error", err.Error())
 	}
 }
+func (admin *AdminModule) site(w http.ResponseWriter, request *http.Request) {
+	t, err := template.ParseFiles("admin/site.html")
+	if err != nil {
+		admin.app.Logger.Error("index template error", err.Error())
+		return
+	}
+	err = t.Execute(w, map[string]string{"admin_uri": admin.prefix, "ExpireDate": admin.app.ExpireDate})
+	if err != nil {
+		admin.app.Logger.Error("index template error", err.Error())
+	}
+}
+func (admin *AdminModule) record(w http.ResponseWriter, request *http.Request) {
+	t, err := template.ParseFiles("admin/record.html")
+	if err != nil {
+		admin.app.Logger.Error("index template error", err.Error())
+		return
+	}
+	err = t.Execute(w, map[string]string{"admin_uri": admin.prefix})
+	if err != nil {
+		admin.app.Logger.Error("index template error", err.Error())
+	}
+}
+
+func (admin *AdminModule) recordList(writer http.ResponseWriter, request *http.Request) {
+
+	params := request.URL.Query()
+	var result = make(map[string]interface{})
+	domain := params.Get("domain")
+	var page int = 1
+	var limit int = 50
+	var startTime int64 = 0
+	var endTime int64 = 0
+	if pageParam := params.Get("page"); pageParam != "" {
+		page, _ = strconv.Atoi(pageParam)
+	}
+	if limitParam := params.Get("limit"); limitParam != "" {
+		limit, _ = strconv.Atoi(limitParam)
+	}
+	if startTimeParam := params.Get("start_time"); startTimeParam != "" {
+		timeResult, err := time.Parse("2006-01-02 15:04:05", startTimeParam)
+		if err == nil {
+			startTime = timeResult.Unix()
+		}
+	}
+	if endTimeParam := params.Get("end_time"); endTimeParam != "" {
+		timeResult, err := time.Parse("2006-01-02 15:04:05", endTimeParam)
+		if err == nil {
+			endTime = timeResult.Unix()
+		}
+	}
+
+	records, err := admin.dao.recordList(domain, startTime, endTime, page, limit)
+	if err != nil {
+		result["code"] = 2
+		result["msg"] = err.Error()
+		data, _ := json.Marshal(result)
+		_, _ = writer.Write(data)
+		return
+	}
+	count, err := admin.dao.recordCount(domain, startTime, endTime, page, limit)
+	if err != nil {
+		result["code"] = 3
+		result["msg"] = err.Error()
+		data, _ := json.Marshal(result)
+		_, _ = writer.Write(data)
+		return
+	}
+	result["code"] = 0
+	result["msg"] = ""
+	result["count"] = count
+	result["data"] = records
+	data, _ := json.Marshal(result)
+	_, _ = writer.Write(data)
+
+}
+
 func (admin *AdminModule) forbiddenWords(writer http.ResponseWriter, request *http.Request) {
 	if request.Method == "GET" {
 		t := template.New("forbidden_words.html")

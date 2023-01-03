@@ -265,6 +265,92 @@ func (dao *Dao) AddRecord(record *Record) error {
 	return nil
 }
 
+func (dao *Dao) recordList(domain string, startTime int64, endTime int64, page int, limit int) ([]Record, error) {
+	start := (page - 1) * limit
+	var rows *sql.Rows
+	var err error
+	var conditions []string
+	if domain != "" {
+		conditions = append(conditions, fmt.Sprintf("domain='%s'", domain))
+	}
+	if startTime > 0 {
+		conditions = append(conditions, fmt.Sprintf("created_time>=%d", startTime))
+	}
+	if endTime > 0 {
+		conditions = append(conditions, fmt.Sprintf("created_time<%d", endTime))
+	}
+	where := ""
+	if len(conditions) > 0 {
+		for i, condition := range conditions {
+			if i == 0 {
+				where += "where " + condition
+			} else {
+				where += " and " + condition
+			}
+		}
+
+	}
+	querySql := fmt.Sprintf("select * from record limit %d,%d", start, limit)
+	if where != "" {
+		querySql = fmt.Sprintf("select * from record %s limit %d,%d", where, start, limit)
+	}
+
+	rows, err = dao.db.Query(querySql)
+
+	if err != nil {
+		return nil, err
+	}
+	var results = make([]Record, 0)
+	for rows.Next() {
+		var record Record
+		err := rows.Scan(
+			&record.Id, &record.Domain, &record.Path,
+			&record.UserAgent, &record.Spider, &record.CreatedTime)
+		if err != nil {
+			return nil, err
+		}
+		results = append(results, record)
+	}
+	_ = rows.Close()
+	return results, nil
+}
+
+func (dao *Dao) recordCount(domain string, startTime int64, endTime int64, page int, limit int) (int, error) {
+	start := (page - 1) * limit
+	var conditions []string
+	if domain != "" {
+		conditions = append(conditions, fmt.Sprintf("domain='%s'", domain))
+	}
+	if startTime > 0 {
+		conditions = append(conditions, fmt.Sprintf("created_time>=%d", startTime))
+	}
+	if endTime > 0 {
+		conditions = append(conditions, fmt.Sprintf("created_time<%d", endTime))
+	}
+	where := ""
+	if len(conditions) > 0 {
+		for i, condition := range conditions {
+			if i == 0 {
+				where += "where " + condition
+			} else {
+				where += " and " + condition
+			}
+		}
+
+	}
+	querySql := fmt.Sprintf("select count(*) as count from record limit %d,%d", start, limit)
+	if where != "" {
+		querySql = fmt.Sprintf("select count(*) as count from record %s limit %d,%d", where, start, limit)
+	}
+	count := 0
+	row := dao.db.QueryRow(querySql)
+	err := row.Scan(&count)
+	if err != nil {
+		return count, err
+	}
+	return count, nil
+}
+
 func InitTable() error {
 	db, err := sql.Open("sqlite3", "config/data.db")
 	if err != nil {

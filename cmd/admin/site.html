@@ -80,7 +80,7 @@
         <div class="layui-btn-container">
             <button class="layui-btn layui-btn-sm" lay-event="add_config">添加</button>
             <button class="layui-btn layui-btn-sm" lay-event="import">导入(.xlsx)</button>
-            <button class="layui-btn layui-btn-sm" lay-event="mul_del">批量删除</button>
+            <button class="layui-btn layui-btn-sm" lay-event="multi_del">批量删除</button>
             <button class="layui-btn layui-btn-sm" lay-event="forbidden_words">禁词替换</button>
 
         </div>
@@ -156,7 +156,7 @@
                         jq("#import").click();
                         return;
                     }
-                    if (obj.event == "mul_del") {
+                    if (obj.event == "multi_del") {
                         layer.prompt({
                             title: "填写域名，一行一个",
                             area: ['600px', '350px'],
@@ -164,7 +164,7 @@
                             maxlength: 3000
                         }, function (text, index) {
                             jq.ajax({
-                                url: '{{.admin_uri}}/mul_del',
+                                url: '{{.admin_uri}}/multi_del',
                                 method: 'post',
                                 data: { "domains": text },
                                 dataType: "JSON",
