@@ -101,11 +101,11 @@
                             for (let i = 0; i < res.data.length; i++) {
                                 let date = new Date(res.data[i].created_time * 1000);
                                 let year=date.getFullYear();
-                                let month=(date.getMonth() + 1)<10?'0'+(date.getMonth() + 1):(date.getMonth() + 1);
-                                let day=date.getDate()<10?'0'+date.getDate():date.getDate;
-                                let hours=date.getHours()<10?'0'+date.getHours():date.getHours();
-                                let minutes=date.getMinutes()<10?'0'+date.getMinutes():date.getMinutes();
-                                let seconds=date.getSeconds()<10?'0'+date.getSeconds():date.getSeconds();
+                                let month=String((date.getMonth() + 1)).padStart(2,0);
+                                let day=String(date.getDate()).padStart(2,0);
+                                let hours=String(date.getHours()).padStart(2,0);
+                                let minutes=String(date.getMinutes()).padStart(2,0);
+                                let seconds=String(date.getSeconds()).padStart(2,0);
                                 let formmaterStr = year + "-" + month + "-" + day + " " + hours + ":" + minutes + ":" + seconds;
                                 res.data[i].created_time = formmaterStr;
                             }
@@ -135,21 +135,6 @@
                 jq('.search-box .layui-btn').on('click', function () {
                     let type = jq(this).data('type');
                     active[type] ? active[type].call(this) : '';
-                });
-
-
-
-                table.on('toolbar(site-list-table)', function (obj) {
-
-
-                });
-
-
-                table.on('tool(site-list-table)', function (obj) {
-
-                    if (obj.event == "delete") {
-
-                    }
                 });
             });
         </script>
