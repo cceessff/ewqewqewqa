@@ -3,6 +3,7 @@ package pkg
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"crypto/md5"
 	"crypto/sha1"
 	"encoding/gob"
@@ -70,16 +71,17 @@ func NewSite(siteConfig *SiteConfig, app *App) error {
 
 func (site *Site) Route(writer http.ResponseWriter, request *http.Request) {
 	ua := request.UserAgent()
-	request.Header.Set("Origin-Ua", ua)
+	host := GetHost(request)
+	request = request.WithContext(context.WithValue(context.WithValue(request.Context(), "Origin-Ua", ua), "HOST", host))
 	if site.isCrawler(ua) && !site.isGoodCrawler(ua) { //如果是蜘蛛但不是好蜘蛛
 		writer.WriteHeader(404)
 		_, _ = writer.Write([]byte("页面未找到"))
 		return
 	}
 
-	cacheKey := site.Domain + request.URL.Path + request.URL.RawQuery
+	cacheKey := host + request.URL.Path + request.URL.RawQuery
 	if site.CacheEnable {
-		if cacheResponse := site.getCache(cacheKey, false); cacheResponse != nil {
+		if cacheResponse := site.getCache(cacheKey, host, false); cacheResponse != nil {
 			for key, values := range cacheResponse.Header {
 				writer.Header()[key] = values
 			}
@@ -88,7 +90,7 @@ func (site *Site) Route(writer http.ResponseWriter, request *http.Request) {
 			if strings.Contains(strings.ToLower(cacheResponse.Header.Get("Content-Type")), "html") {
 				isSpider := site.isCrawler(ua)
 				if isSpider {
-					site.app.AddRecord(site.Domain, request.URL.Path, ua)
+					site.app.AddRecord(host, request.URL.Path, ua)
 				}
 				content = site.injectJs(content, isIndexPage(request.URL), isSpider)
 			}
@@ -114,10 +116,13 @@ func (site *Site) Route(writer http.ResponseWriter, request *http.Request) {
 
 }
 func (site *Site) ModifyResponse(response *http.Response) error {
+	host := response.Request.Context().Value("HOST").(string)
 	if response.StatusCode == 301 || response.StatusCode == 302 {
-		return site.handleRedirectResponse(response)
+		return site.handleRedirectResponse(response, host)
 	}
-	cacheKey := site.Domain + response.Request.URL.Path + response.Request.URL.RawQuery
+	//host := GetHost(response.Request)
+
+	cacheKey := host + response.Request.URL.Path + response.Request.URL.RawQuery
 	if response.StatusCode == 200 {
 		content, err := site.readResponse(response)
 		if err != nil {
@@ -126,35 +131,35 @@ func (site *Site) ModifyResponse(response *http.Response) error {
 		contentType := strings.ToLower(response.Header.Get("Content-Type"))
 
 		if strings.Contains(contentType, "text/html") {
-			return site.handleHtmlResponse(content, response, contentType)
+			return site.handleHtmlResponse(content, response, contentType, host)
 		} else if strings.Contains(contentType, "css") || strings.Contains(contentType, "javascript") {
 			content = GBk2UTF8(content, contentType)
-			contentStr := site.replaceHost(string(content))
+			contentStr := site.replaceHost(string(content), host)
 			content = []byte(contentStr)
-			site.setCache(cacheKey, response, content)
+			site.setCache(cacheKey, response, content, host)
 			site.wrapResponseBody(response, content)
 			return nil
 
 		}
-		site.setCache(cacheKey, response, content)
+		site.setCache(cacheKey, response, content, host)
 		site.wrapResponseBody(response, content)
 		return nil
 
 	}
 	if response.StatusCode > 400 && response.StatusCode < 500 {
 		content := []byte("访问的页面不存在")
-		site.setCache(cacheKey, response, content)
+		site.setCache(cacheKey, response, content, host)
 		site.wrapResponseBody(response, content)
 	}
 	return nil
 }
 
-func (site *Site) handleRedirectResponse(response *http.Response) error {
+func (site *Site) handleRedirectResponse(response *http.Response, host string) error {
 	redirectUrl, err := response.Request.URL.Parse(response.Header.Get("Location"))
 	if err != nil {
 		return err
 	}
-	redirectUrl.Host = site.Domain
+	redirectUrl.Host = host
 	redirectUrl.Scheme = site.Schema
 	// if !isIndexPage(redirectUrl) {
 	// 	site.EncodeUrl(redirectUrl)
@@ -162,17 +167,17 @@ func (site *Site) handleRedirectResponse(response *http.Response) error {
 	response.Header.Set("Location", redirectUrl.String())
 	return nil
 }
-func (site *Site) handleHtmlNode(node *html.Node, isIndexPage bool, replacedH1 *bool) {
+func (site *Site) handleHtmlNode(node *html.Node, host string, isIndexPage bool, replacedH1 *bool) {
 	for c := node.FirstChild; c != nil; c = c.NextSibling {
 		switch c.Type {
 		case html.TextNode, html.CommentNode, html.RawNode:
-			c.Data = site.transformText(c.Data)
+			c.Data = site.transformText(c.Data, host)
 		case html.ElementNode:
 			if c.Data == "a" {
-				site.transformANode(c)
+				site.transformANode(c, host)
 			}
 			if c.Data == "link" {
-				site.transformLinkNode(c)
+				site.transformLinkNode(c, host)
 			}
 			if c.Data == "title" {
 				site.transformTitleNode(c, isIndexPage)
@@ -195,7 +200,7 @@ func (site *Site) handleHtmlNode(node *html.Node, isIndexPage bool, replacedH1 *
 			}
 			for i, attr := range c.Attr {
 				if attr.Key == "href" || attr.Key == "src" {
-					c.Attr[i].Val = site.replaceHost(attr.Val)
+					c.Attr[i].Val = site.replaceHost(attr.Val, host)
 				}
 				if attr.Key == "title" || attr.Key == "alt" || attr.Key == "value" || attr.Key == "placeholder" {
 					for index, find := range site.Finds {
@@ -210,7 +215,7 @@ func (site *Site) handleHtmlNode(node *html.Node, isIndexPage bool, replacedH1 *
 			}
 
 		}
-		site.handleHtmlNode(c, isIndexPage, replacedH1)
+		site.handleHtmlNode(c, host, isIndexPage, replacedH1)
 	}
 }
 func (site *Site) transformMetaNode(node *html.Node, isIndexPage bool) {
@@ -257,18 +262,18 @@ func (site *Site) transformScriptNode(node *html.Node) {
 	}
 
 }
-func (site *Site) transformText(text string) string {
+func (site *Site) transformText(text string, host string) string {
 	for index, find := range site.Finds {
 		tag := fmt.Sprintf("{{replace:%d}}", index)
 		text = strings.ReplaceAll(text, find, tag)
 	}
-	text = site.replaceHost(text)
+	text = site.replaceHost(text, host)
 	if site.S2t {
 		text, _ = site.app.S2T.ConvertText(text)
 	}
 	return text
 }
-func (site *Site) transformLinkNode(node *html.Node) {
+func (site *Site) transformLinkNode(node *html.Node, host string) {
 	var isAlternate bool = false
 	for _, attr := range node.Attr {
 		if attr.Key == "rel" && attr.Val == "alternate" {
@@ -281,24 +286,25 @@ func (site *Site) transformLinkNode(node *html.Node) {
 	}
 	for i, attr := range node.Attr {
 		if attr.Key == "href" {
-			node.Attr[i].Val = "//" + site.Domain
+			node.Attr[i].Val = "//" + host
 			break
 		}
 	}
 }
-func (site *Site) transformANode(node *html.Node) {
+func (site *Site) transformANode(node *html.Node, host string) {
 	ou, _ := url.Parse(site.Url)
 	for i, attr := range node.Attr {
 		if attr.Key != "href" || attr.Val == "" {
 			continue
 		}
+
 		u, _ := ou.Parse(attr.Val)
 		if u == nil {
 			break
 		}
 		if u.Host == ou.Host {
 			u.Scheme = site.Schema
-			u.Host = site.Domain
+			u.Host = host
 			node.Attr[i].Val = u.String()
 			break
 		}
@@ -337,23 +343,23 @@ func (site *Site) parseTemplateTags(content []byte) []byte {
 	}
 	return []byte(contentStr)
 }
-func (site *Site) handleHtmlResponse(content []byte, response *http.Response, contentType string) error {
+func (site *Site) handleHtmlResponse(content []byte, response *http.Response, contentType string, host string) error {
 	isIndexPage := isIndexPage(response.Request.URL)
-	content = site.handleHtmlContent(content, contentType, isIndexPage)
+	content = site.handleHtmlContent(content, host, contentType, isIndexPage)
 	content = site.parseTemplateTags(content)
-	cacheKey := site.Domain + response.Request.URL.Path + response.Request.URL.RawQuery
-	site.setCache(cacheKey, response, content)
-	originUa := response.Request.Header.Get("Origin-Ua")
+	cacheKey := host + response.Request.URL.Path + response.Request.URL.RawQuery
+	site.setCache(cacheKey, response, content, host)
+	originUa := response.Request.Context().Value("Origin-Ua").(string)
 	isSpider := site.isCrawler(originUa)
 	content = site.injectJs(content, isIndexPage, isSpider)
 	site.wrapResponseBody(response, content)
 	if isSpider {
-		site.app.AddRecord(site.Domain, response.Request.URL.Path, originUa)
+		site.app.AddRecord(host, response.Request.URL.Path, originUa)
 	}
 	return nil
 
 }
-func (site *Site) handleHtmlContent(content []byte, contentType string, isIndexPage bool) []byte {
+func (site *Site) handleHtmlContent(content []byte, host string, contentType string, isIndexPage bool) []byte {
 	content = GBk2UTF8(content, contentType)
 	document, err := html.Parse(bytes.NewReader(content))
 	if err != nil {
@@ -362,7 +368,7 @@ func (site *Site) handleHtmlContent(content []byte, contentType string, isIndexP
 	}
 	var replacedH1 bool = false
 	for c := document.FirstChild; c != nil; c = c.NextSibling {
-		site.handleHtmlNode(c, isIndexPage, &replacedH1)
+		site.handleHtmlNode(c, host, isIndexPage, &replacedH1)
 		if !replacedH1 && c.FirstChild != nil && c.FirstChild.NextSibling != nil && site.H1Replace != "" {
 			c.FirstChild.NextSibling.InsertBefore(&html.Node{
 				Type: html.ElementNode,
@@ -453,19 +459,19 @@ func (site *Site) DecodeUrl(u *url.URL) {
 
 }
 
-func (site *Site) replaceHost(content string) string {
+func (site *Site) replaceHost(content string, host string) string {
 	u, _ := url.Parse(site.Url)
-	content = strings.Replace(content, u.Host, site.Domain, -1)
+	content = strings.Replace(content, u.Host, host, -1)
 	if site.Schema == "https" {
-		content = strings.Replace(content, "http://"+site.Domain, "https://"+site.Domain, -1)
+		content = strings.Replace(content, "http://"+host, "https://"+host, -1)
 	} else {
-		content = strings.Replace(content, "https://"+site.Domain, "http://"+site.Domain, -1)
+		content = strings.Replace(content, "https://"+host, "http://"+host, -1)
 	}
 	hostParts := strings.Split(u.Host, ".")
-	host := strings.Join(hostParts[1:], ".")
-	subDomainRegexp, _ := regexp.Compile(`[a-zA-Z0-9]+\.` + host)
+	originHost := strings.Join(hostParts[1:], ".")
+	subDomainRegexp, _ := regexp.Compile(`[a-zA-Z0-9]+\.` + originHost)
 	content = subDomainRegexp.ReplaceAllString(content, "")
-	content = strings.Replace(content, host, site.Domain, -1)
+	content = strings.Replace(content, originHost, site.Domain, -1)
 	return content
 }
 func (site *Site) transformTitleNode(node *html.Node, isIndexPage bool) {
@@ -493,7 +499,7 @@ func (site *Site) transformTitleNode(node *html.Node, isIndexPage bool) {
 	}
 }
 
-func (site *Site) setCache(url string, response *http.Response, content []byte) error {
+func (site *Site) setCache(url string, response *http.Response, content []byte, host string) error {
 	if strings.Contains(strings.ToLower(response.Header.Get("Content-Type")), "charset") {
 		contentType := response.Header.Get("Content-Type")
 		contentPartArr := strings.Split(contentType, ";")
@@ -508,7 +514,7 @@ func (site *Site) setCache(url string, response *http.Response, content []byte) 
 
 	sum := sha1.Sum([]byte(url))
 	hash := hex.EncodeToString(sum[:])
-	dir := path.Join(site.CachePath, site.Domain, hash[:5])
+	dir := path.Join(site.CachePath, host, hash[:5])
 	if !isExist(dir) {
 		err := os.MkdirAll(dir, os.ModePerm)
 		if err != nil {
@@ -529,10 +535,10 @@ func (site *Site) setCache(url string, response *http.Response, content []byte) 
 	}
 	return nil
 }
-func (site *Site) getCache(requestUrl string, force bool) *CustomResponse {
+func (site *Site) getCache(requestUrl string, host string, force bool) *CustomResponse {
 	sum := sha1.Sum([]byte(requestUrl))
 	hash := hex.EncodeToString(sum[:])
-	dir := path.Join(site.CachePath, site.Domain, hash[:5])
+	dir := path.Join(site.CachePath, host, hash[:5])
 	filename := path.Join(dir, hash)
 	fileInfo, err := os.Stat(filename)
 	if err != nil {
@@ -614,8 +620,9 @@ func (site *Site) wrapResponseBody(response *http.Response, content []byte) {
 }
 func (site *Site) ErrorHandler(writer http.ResponseWriter, request *http.Request, e error) {
 	site.app.Logger.Error(request.URL.String(), e.Error())
-	cacheKey := site.Domain + request.URL.Path + request.URL.RawQuery
-	cacheResponse := site.getCache(cacheKey, true)
+	host := request.Context().Value("HOST").(string)
+	cacheKey := host + request.URL.Path + request.URL.RawQuery
+	cacheResponse := site.getCache(cacheKey, host, true)
 	if cacheResponse == nil {
 		writer.WriteHeader(404)
 		writer.Write([]byte("请求出错，请检查源站"))
@@ -627,7 +634,7 @@ func (site *Site) ErrorHandler(writer http.ResponseWriter, request *http.Request
 	}
 	var content = cacheResponse.Body
 	if strings.Contains(strings.ToLower(cacheResponse.Header.Get("Content-Type")), "html") {
-		ua := request.Header.Get("Origin-Ua")
+		ua := request.Context().Value("Origin-Ua").(string)
 		content = site.injectJs(content, isIndexPage(request.URL), site.isCrawler(ua))
 	}
 	contentLength := int64(len(content))

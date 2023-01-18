@@ -105,8 +105,19 @@ func (app *App) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	host := GetHost(request)
 	item, ok := app.Sites.Load(host)
 	if !ok {
-		_, _ = writer.Write([]byte("未找到该代理域名，请检查配置 " + host))
-		return
+		hostParts := strings.Split(host, ".")
+
+		if IsDoubleSuffixDomain(host) {
+			host = strings.Join(hostParts[len(hostParts)-3:], ".")
+		} else {
+			host = strings.Join(hostParts[len(hostParts)-2:], ".")
+		}
+		item, ok = app.Sites.Load(host)
+		if !ok {
+			_, _ = writer.Write([]byte("未找到该代理域名，请检查配置 " + host))
+			return
+		}
+
 	}
 	site := item.(*Site)
 	if site.Schema == "" {

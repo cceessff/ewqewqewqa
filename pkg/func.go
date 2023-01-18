@@ -271,3 +271,13 @@ func HtmlEntities(input string) string {
 	}
 	return buffer.String()
 }
+
+func IsDoubleSuffixDomain(host string) bool {
+	suffixs := []string{"com.cn", "net.cn", "org.cn"}
+	for _, suffix := range suffixs {
+		if strings.Contains(host, suffix) {
+			return true
+		}
+	}
+	return false
+}
