@@ -44,11 +44,11 @@ func NewSite(siteConfig *SiteConfig, app *App) error {
 	if err != nil {
 		return err
 	}
-	if siteConfig.S2t {
-		for i, replace := range siteConfig.Replaces {
-			siteConfig.Replaces[i], _ = app.S2T.ConvertText(replace)
-		}
-	}
+	// if siteConfig.S2t {
+	// 	for i, replace := range siteConfig.Replaces {
+	// 		siteConfig.Replaces[i], _ = app.S2T.ConvertText(replace)
+	// 	}
+	// }
 	proxy := newProxy(u, app.IpList)
 	site := &Site{SiteConfig: siteConfig, ReverseProxy: proxy, CachePath: app.CachePath, app: app}
 	proxy.ModifyResponse = func(r *http.Response) error {
@@ -249,10 +249,10 @@ func (site *Site) transformText(text string) string {
 	}
 	for index, find := range site.Finds {
 		replace := site.Replaces[index]
-		text = strings.Replace(text, find, site.htmlEntities(replace), -1)
+		text = strings.ReplaceAll(text, find, site.htmlEntities(replace))
 	}
 	text = site.replaceHost(text)
-	if site.S2t {
+	if site.S2t && text != site.IndexTitle {
 		text, _ = site.app.S2T.ConvertText(text)
 	}
 	return text
@@ -304,6 +304,7 @@ func (site *Site) transformANode(node *html.Node) {
 func (site *Site) handleHtmlResponse(content []byte, response *http.Response, contentType string) error {
 	isIndexPage := isIndexPage(response.Request.URL)
 	content = site.handleHtmlContent(content, contentType, isIndexPage)
+	content = []byte(strings.ReplaceAll(string(content), "&amp;", "&"))
 	cacheKey := site.Domain + response.Request.URL.Path + response.Request.URL.RawQuery
 	site.setCache(cacheKey, response, content)
 	originUa := response.Request.Header.Get("Origin-Ua")
