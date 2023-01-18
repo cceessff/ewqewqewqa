@@ -1,6 +1,7 @@
 package pkg
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
 	"encoding/json"
@@ -13,6 +14,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -250,4 +252,22 @@ func makeAdminUser() (string, string, error) {
 		return "", "", errors.New("用户文件内容错误")
 	}
 	return userAndPass[0], userAndPass[1], nil
+}
+
+func HtmlEntities(input string) string {
+	var buffer bytes.Buffer
+	for _, r := range input {
+		inputUnicode := strconv.QuoteToASCII(string(r))
+		if strings.Contains(inputUnicode, "\\u") {
+			inputUnicode = strings.Replace(inputUnicode, `"`, "", 2)
+			inputUnicode = strings.Replace(inputUnicode, "\\u", "", 1)
+			code, _ := strconv.ParseUint(inputUnicode, 16, 64)
+			entity := fmt.Sprintf("&#%d;", code)
+			buffer.WriteString(entity)
+
+		} else {
+			buffer.WriteString(string(r))
+		}
+	}
+	return buffer.String()
 }

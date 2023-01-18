@@ -44,11 +44,18 @@ func NewSite(siteConfig *SiteConfig, app *App) error {
 	if err != nil {
 		return err
 	}
-	// if siteConfig.S2t {
-	// 	for i, replace := range siteConfig.Replaces {
-	// 		siteConfig.Replaces[i], _ = app.S2T.ConvertText(replace)
-	// 	}
-	// }
+
+	siteConfig.IndexTitle = HtmlEntities(siteConfig.IndexTitle)
+	siteConfig.IndexKeywords = HtmlEntities(siteConfig.IndexKeywords)
+	siteConfig.IndexDescription = HtmlEntities(siteConfig.IndexDescription)
+	for _, item := range app.GlobalReplace {
+		siteConfig.Replaces = append(siteConfig.Replaces, item["replace"])
+		siteConfig.Finds = append(siteConfig.Finds, item["needle"])
+	}
+	for i, replace := range siteConfig.Replaces {
+		siteConfig.Replaces[i] = HtmlEntities(replace)
+	}
+
 	proxy := newProxy(u, app.IpList)
 	site := &Site{SiteConfig: siteConfig, ReverseProxy: proxy, CachePath: app.CachePath, app: app}
 	proxy.ModifyResponse = func(r *http.Response) error {
@@ -190,8 +197,15 @@ func (site *Site) handleHtmlNode(node *html.Node, isIndexPage bool, replacedH1 *
 				if attr.Key == "href" || attr.Key == "src" {
 					c.Attr[i].Val = site.replaceHost(attr.Val)
 				}
-				if (attr.Key == "title" || attr.Key == "alt" || attr.Key == "value") && site.S2t {
-					c.Attr[i].Val, _ = site.app.S2T.ConvertText(attr.Val)
+				if attr.Key == "title" || attr.Key == "alt" || attr.Key == "value" || attr.Key == "placeholder" {
+					for index, find := range site.Finds {
+						tag := fmt.Sprintf("{{replace:%d}}", index)
+						attr.Val = strings.ReplaceAll(attr.Val, find, tag)
+					}
+					c.Attr[i].Val = attr.Val
+					if site.S2t {
+						c.Attr[i].Val, _ = site.app.S2T.ConvertText(attr.Val)
+					}
 				}
 			}
 
@@ -203,11 +217,11 @@ func (site *Site) transformMetaNode(node *html.Node, isIndexPage bool) {
 	content := ""
 	for i, attr := range node.Attr {
 		if attr.Key == "name" && attr.Val == "keywords" && isIndexPage {
-			content = site.IndexKeywords
+			content = "{{index_keywords}}"
 			break
 		}
 		if attr.Key == "name" && attr.Val == "description" && isIndexPage {
-			content = site.IndexDescription
+			content = "{{index_description}}"
 			break
 		}
 		if strings.ToLower(attr.Key) == "http-equiv" && strings.ToLower(attr.Val) == "content-type" {
@@ -244,15 +258,12 @@ func (site *Site) transformScriptNode(node *html.Node) {
 
 }
 func (site *Site) transformText(text string) string {
-	for _, item := range site.app.GlobalReplace {
-		text = strings.Replace(text, item["needle"], item["replace"], -1)
-	}
 	for index, find := range site.Finds {
-		replace := site.Replaces[index]
-		text = strings.ReplaceAll(text, find, site.htmlEntities(replace))
+		tag := fmt.Sprintf("{{replace:%d}}", index)
+		text = strings.ReplaceAll(text, find, tag)
 	}
 	text = site.replaceHost(text)
-	if site.S2t && text != site.IndexTitle {
+	if site.S2t {
 		text, _ = site.app.S2T.ConvertText(text)
 	}
 	return text
@@ -301,10 +312,35 @@ func (site *Site) transformANode(node *html.Node) {
 		break
 	}
 }
+func (site *Site) parseTemplateTags(content []byte) []byte {
+	contentStr := string(content)
+	contentStr = strings.ReplaceAll(contentStr, "{{index_title}}", site.IndexTitle)
+	contentStr = strings.ReplaceAll(contentStr, "{{index_keywords}}", site.IndexKeywords)
+	contentStr = strings.ReplaceAll(contentStr, "{{index_description}}", site.IndexDescription)
+	keywordRegexp, _ := regexp.Compile(`\{\{keyword:(\d+)\}\}`)
+	keywordTags := keywordRegexp.FindAllStringSubmatch(contentStr, -1)
+	for _, keywordTag := range keywordTags {
+		index, err := strconv.Atoi(keywordTag[1])
+		if err != nil {
+			continue
+		}
+		contentStr = strings.ReplaceAll(contentStr, keywordTag[0], site.app.Keywords[index])
+	}
+	replaceRegexp, _ := regexp.Compile(`\{\{replace:(\d+)\}\}`)
+	replaceTags := replaceRegexp.FindAllStringSubmatch(contentStr, -1)
+	for _, replaceTag := range replaceTags {
+		index, err := strconv.Atoi(replaceTag[1])
+		if err != nil {
+			continue
+		}
+		contentStr = strings.ReplaceAll(contentStr, replaceTag[0], site.Replaces[index])
+	}
+	return []byte(contentStr)
+}
 func (site *Site) handleHtmlResponse(content []byte, response *http.Response, contentType string) error {
 	isIndexPage := isIndexPage(response.Request.URL)
 	content = site.handleHtmlContent(content, contentType, isIndexPage)
-	content = []byte(strings.ReplaceAll(string(content), "&amp;", "&"))
+	content = site.parseTemplateTags(content)
 	cacheKey := site.Domain + response.Request.URL.Path + response.Request.URL.RawQuery
 	site.setCache(cacheKey, response, content)
 	originUa := response.Request.Header.Get("Origin-Ua")
@@ -416,23 +452,7 @@ func (site *Site) DecodeUrl(u *url.URL) {
 	u.Path = string(pathRunes) + file
 
 }
-func (site *Site) htmlEntities(input string) string {
-	var buffer bytes.Buffer
-	for _, r := range input {
-		inputUnicode := strconv.QuoteToASCII(string(r))
-		if strings.Contains(inputUnicode, "\\u") {
-			inputUnicode = strings.Replace(inputUnicode, `"`, "", 2)
-			inputUnicode = strings.Replace(inputUnicode, "\\u", "", 1)
-			code, _ := strconv.ParseUint(inputUnicode, 16, 64)
-			entity := fmt.Sprintf("&#%d;", code)
-			buffer.WriteString(entity)
 
-		} else {
-			buffer.WriteString(string(r))
-		}
-	}
-	return buffer.String()
-}
 func (site *Site) replaceHost(content string) string {
 	u, _ := url.Parse(site.Url)
 	content = strings.Replace(content, u.Host, site.Domain, -1)
@@ -450,14 +470,13 @@ func (site *Site) replaceHost(content string) string {
 }
 func (site *Site) transformTitleNode(node *html.Node, isIndexPage bool) {
 	if isIndexPage {
-		title := site.IndexTitle
 		if node.FirstChild != nil && node.FirstChild.Type == html.TextNode {
-			node.FirstChild.Data = title
+			node.FirstChild.Data = "{{index_title}}"
 			return
 		}
 		node.FirstChild = &html.Node{
 			Type: html.TextNode,
-			Data: title,
+			Data: "{{index_title}}",
 		}
 		return
 	}
@@ -465,13 +484,12 @@ func (site *Site) transformTitleNode(node *html.Node, isIndexPage bool) {
 	if !isIndexPage && len(site.app.Keywords) > 0 && node.FirstChild != nil && node.FirstChild.Type == html.TextNode {
 		title := node.FirstChild.Data
 		randIndex := rand.Intn(len(site.app.Keywords))
-		keywrod := site.app.Keywords[randIndex]
 		d := []rune(title)
 		length := strings.Count(title, "")
 		n := rand.Intn(length)
-		title = string(d[:n]) + keywrod + string(d[n:])
+		tag := fmt.Sprintf("{{keyword:%d}}", randIndex)
+		title = string(d[:n]) + tag + string(d[n:])
 		node.FirstChild.Data = title
-
 	}
 }
 
