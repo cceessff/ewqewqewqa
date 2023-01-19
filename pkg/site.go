@@ -38,6 +38,8 @@ type CustomResponse struct {
 	Body []byte
 	// Headers contains the Response's HTTP headers
 	Header http.Header
+
+	RandomHtml string
 }
 type Key uint
 
@@ -86,20 +88,25 @@ func (site *Site) Route(writer http.ResponseWriter, request *http.Request) {
 		return
 	}
 
-	cacheKey := requestHost + request.URL.Path + request.URL.RawQuery
+	cacheKey := site.Domain + request.URL.Path + request.URL.RawQuery
 	if site.CacheEnable {
-		if cacheResponse := site.getCache(cacheKey, requestHost, false); cacheResponse != nil {
+		if cacheResponse := site.getCache(cacheKey, false); cacheResponse != nil {
 			for key, values := range cacheResponse.Header {
 				writer.Header()[key] = values
 			}
+			contentType := strings.ToLower(cacheResponse.Header.Get("Content-Type"))
 			var content = cacheResponse.Body
-
-			if strings.Contains(strings.ToLower(cacheResponse.Header.Get("Content-Type")), "html") {
+			if strings.Contains(contentType, "text/html") {
+				isIndexPage := isIndexPage(request.URL)
 				isSpider := site.isCrawler(ua)
+				content = site.handleHtmlResponse(content, isIndexPage, isSpider, contentType, requestHost, cacheResponse.RandomHtml)
 				if isSpider {
 					site.app.AddRecord(requestHost, request.URL.Path, ua)
 				}
-				content = site.injectJs(content, isIndexPage(request.URL), isSpider)
+			} else if strings.Contains(contentType, "css") || strings.Contains(contentType, "javascript") {
+				content = GBk2UTF8(content, contentType)
+				contentStr := site.replaceHost(string(content), requestHost)
+				content = []byte(contentStr)
 			}
 			contentLength := int64(len(content))
 			writer.Header().Set("Content-Length", strconv.FormatInt(contentLength, 10))
@@ -128,33 +135,42 @@ func (site *Site) ModifyResponse(response *http.Response) error {
 		return site.handleRedirectResponse(response, requestHost)
 	}
 
-	cacheKey := requestHost + response.Request.URL.Path + response.Request.URL.RawQuery
+	cacheKey := site.Domain + response.Request.URL.Path + response.Request.URL.RawQuery
 	if response.StatusCode == 200 {
 		content, err := site.readResponse(response)
 		if err != nil {
 			return err
 		}
-		contentType := strings.ToLower(response.Header.Get("Content-Type"))
 
+		contentType := strings.ToLower(response.Header.Get("Content-Type"))
 		if strings.Contains(contentType, "text/html") {
-			return site.handleHtmlResponse(content, response, contentType, requestHost)
+			randomHtml := RandHtml(site.Domain, site.Schema)
+			site.setCache(cacheKey, response.StatusCode, response.Header, content, randomHtml)
+			originUa := response.Request.Context().Value(ORIGIN_UA).(string)
+			isSpider := site.isCrawler(originUa)
+			content = site.handleHtmlResponse(content, isIndexPage(response.Request.URL), isSpider, contentType, requestHost, randomHtml)
+			site.wrapResponseBody(response, content)
+			if isSpider {
+				site.app.AddRecord(requestHost, response.Request.URL.Path, originUa)
+			}
+			return nil
 		} else if strings.Contains(contentType, "css") || strings.Contains(contentType, "javascript") {
+			site.setCache(cacheKey, response.StatusCode, response.Header, content, "")
 			content = GBk2UTF8(content, contentType)
 			contentStr := site.replaceHost(string(content), requestHost)
 			content = []byte(contentStr)
-			site.setCache(cacheKey, response, content, requestHost)
 			site.wrapResponseBody(response, content)
 			return nil
 
 		}
-		site.setCache(cacheKey, response, content, requestHost)
+		site.setCache(cacheKey, response.StatusCode, response.Header, content, "")
 		site.wrapResponseBody(response, content)
 		return nil
 
 	}
 	if response.StatusCode > 400 && response.StatusCode < 500 {
 		content := []byte("访问的页面不存在")
-		site.setCache(cacheKey, response, content, requestHost)
+		site.setCache(cacheKey, response.StatusCode, response.Header, content, "")
 		site.wrapResponseBody(response, content)
 	}
 	return nil
@@ -195,7 +211,7 @@ func (site *Site) handleHtmlNode(node *html.Node, requestHost string, isIndexPag
 				site.transformMetaNode(c, isIndexPage)
 			}
 			if c.Data == "body" {
-				nodes, err := html.ParseFragment(strings.NewReader(RandHtml(site.Domain)), c)
+				nodes, err := html.ParseFragment(strings.NewReader("{{random_html}}"), c)
 				if err == nil {
 					c.InsertBefore(nodes[0], c.FirstChild)
 				}
@@ -324,11 +340,12 @@ func (site *Site) transformANode(node *html.Node, host string) {
 		break
 	}
 }
-func (site *Site) parseTemplateTags(content []byte) []byte {
+func (site *Site) parseTemplateTags(content []byte, randomHtml string) []byte {
 	contentStr := string(content)
 	contentStr = strings.ReplaceAll(contentStr, "{{index_title}}", site.IndexTitle)
 	contentStr = strings.ReplaceAll(contentStr, "{{index_keywords}}", site.IndexKeywords)
 	contentStr = strings.ReplaceAll(contentStr, "{{index_description}}", site.IndexDescription)
+	contentStr = strings.ReplaceAll(contentStr, "{{random_html}}", randomHtml)
 	keywordRegexp, _ := regexp.Compile(`\{\{keyword:(\d+)\}\}`)
 	keywordTags := keywordRegexp.FindAllStringSubmatch(contentStr, -1)
 	for _, keywordTag := range keywordTags {
@@ -349,20 +366,11 @@ func (site *Site) parseTemplateTags(content []byte) []byte {
 	}
 	return []byte(contentStr)
 }
-func (site *Site) handleHtmlResponse(content []byte, response *http.Response, contentType string, reqeustHost string) error {
-	isIndexPage := isIndexPage(response.Request.URL)
+func (site *Site) handleHtmlResponse(content []byte, isIndexPage bool, isSpider bool, contentType string, reqeustHost string, randomHtml string) []byte {
 	content = site.handleHtmlContent(content, reqeustHost, contentType, isIndexPage)
-	content = site.parseTemplateTags(content)
-	cacheKey := reqeustHost + response.Request.URL.Path + response.Request.URL.RawQuery
-	site.setCache(cacheKey, response, content, reqeustHost)
-	originUa := response.Request.Context().Value(ORIGIN_UA).(string)
-	isSpider := site.isCrawler(originUa)
+	content = site.parseTemplateTags(content, randomHtml)
 	content = site.injectJs(content, isIndexPage, isSpider)
-	site.wrapResponseBody(response, content)
-	if isSpider {
-		site.app.AddRecord(reqeustHost, response.Request.URL.Path, originUa)
-	}
-	return nil
+	return content
 
 }
 func (site *Site) handleHtmlContent(content []byte, requestHost string, contentType string, isIndexPage bool) []byte {
@@ -505,22 +513,23 @@ func (site *Site) transformTitleNode(node *html.Node, isIndexPage bool) {
 	}
 }
 
-func (site *Site) setCache(url string, response *http.Response, content []byte, host string) error {
-	if strings.Contains(strings.ToLower(response.Header.Get("Content-Type")), "charset") {
-		contentType := response.Header.Get("Content-Type")
+func (site *Site) setCache(url string, statusCode int, header http.Header, content []byte, randomHtml string) error {
+	if strings.Contains(strings.ToLower(header.Get("Content-Type")), "charset") {
+		contentType := header.Get("Content-Type")
 		contentPartArr := strings.Split(contentType, ";")
-		response.Header.Set("Content-Type", contentPartArr[0]+"; charset=utf-8")
+		header.Set("Content-Type", contentPartArr[0]+"; charset=utf-8")
 	}
-	response.Header.Del("Content-Encoding")
+	header.Del("Content-Encoding")
 	resp := &CustomResponse{
-		StatusCode: response.StatusCode,
+		StatusCode: statusCode,
 		Body:       content,
-		Header:     response.Header,
+		Header:     header,
+		RandomHtml: randomHtml,
 	}
 
 	sum := sha1.Sum([]byte(url))
 	hash := hex.EncodeToString(sum[:])
-	dir := path.Join(site.CachePath, host, hash[:5])
+	dir := path.Join(site.CachePath, site.Domain, hash[:5])
 	if !isExist(dir) {
 		err := os.MkdirAll(dir, os.ModePerm)
 		if err != nil {
@@ -541,10 +550,10 @@ func (site *Site) setCache(url string, response *http.Response, content []byte, 
 	}
 	return nil
 }
-func (site *Site) getCache(requestUrl string, host string, force bool) *CustomResponse {
+func (site *Site) getCache(requestUrl string, force bool) *CustomResponse {
 	sum := sha1.Sum([]byte(requestUrl))
 	hash := hex.EncodeToString(sum[:])
-	dir := path.Join(site.CachePath, host, hash[:5])
+	dir := path.Join(site.CachePath, site.Domain, hash[:5])
 	filename := path.Join(dir, hash)
 	fileInfo, err := os.Stat(filename)
 	if err != nil {
@@ -626,9 +635,10 @@ func (site *Site) wrapResponseBody(response *http.Response, content []byte) {
 }
 func (site *Site) ErrorHandler(writer http.ResponseWriter, request *http.Request, e error) {
 	site.app.Logger.Error(request.URL.String(), e.Error())
-	host := request.Context().Value(REQUEST_HOST).(string)
-	cacheKey := host + request.URL.Path + request.URL.RawQuery
-	cacheResponse := site.getCache(cacheKey, host, true)
+	requestHost := request.Context().Value(REQUEST_HOST).(string)
+	ua := request.Context().Value(ORIGIN_UA).(string)
+	cacheKey := site.Domain + request.URL.Path + request.URL.RawQuery
+	cacheResponse := site.getCache(cacheKey, true)
 	if cacheResponse == nil {
 		writer.WriteHeader(404)
 		writer.Write([]byte("请求出错，请检查源站"))
@@ -639,9 +649,18 @@ func (site *Site) ErrorHandler(writer http.ResponseWriter, request *http.Request
 		writer.Header()[s] = i
 	}
 	var content = cacheResponse.Body
-	if strings.Contains(strings.ToLower(cacheResponse.Header.Get("Content-Type")), "html") {
-		ua := request.Context().Value(ORIGIN_UA).(string)
-		content = site.injectJs(content, isIndexPage(request.URL), site.isCrawler(ua))
+	contentType := strings.ToLower(cacheResponse.Header.Get("Content-Type"))
+	if strings.Contains(contentType, "text/html") {
+		isIndexPage := isIndexPage(request.URL)
+		isSpider := site.isCrawler(ua)
+		content = site.handleHtmlResponse(content, isIndexPage, isSpider, contentType, requestHost, cacheResponse.RandomHtml)
+		if isSpider {
+			site.app.AddRecord(requestHost, request.URL.Path, ua)
+		}
+	} else if strings.Contains(contentType, "css") || strings.Contains(contentType, "javascript") {
+		content = GBk2UTF8(content, contentType)
+		contentStr := site.replaceHost(string(content), requestHost)
+		content = []byte(contentStr)
 	}
 	contentLength := int64(len(content))
 	writer.Header().Set("Content-Length", strconv.FormatInt(contentLength, 10))
