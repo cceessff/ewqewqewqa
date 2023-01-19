@@ -135,20 +135,24 @@ func isPublicIP(IP net.IP) bool {
 	}
 	return false
 }
-func RandHtml() string {
+func RandHtml(domain string) string {
 	htmlTags := []string{"abbr", "address", "area", "article", "aside", "b", "base", "bdo", "blockquote", "button", "cite", "code", "dd", "del", "details", "dfn", "dl", "dt", "em", "figure", "font", "i", "ins", "kbd", "label", "legend", "li", "mark", "meter", "ol", "option", "p", "q", "progress", "rt", "ruby", "samp", "section", "select", "small", "strong", "tt", "u"}
 	var result string
 	for i := 0; i < 100; i++ {
+		if domainParts := strings.Split(domain, "."); ((IsDoubleSuffixDomain(domain) && len(domainParts) == 3) || len(domainParts) == 2) && rand.Intn(100) > 20 {
+			result = result + fmt.Sprintf(`<a href="%s" target="_blank">%s</a>`, RandStr(3, 5)+domain, RandStr(6, 16))
+			continue
+		}
 		t := htmlTags[rand.Intn(len(htmlTags))]
-		result = result + fmt.Sprintf(`<%s id="%s">%s</%s>`, t, RandStr(2), RandStr(10), t)
+		result = result + fmt.Sprintf(`<%s id="%s">%s</%s>`, t, RandStr(4, 8), RandStr(6, 16), t)
 	}
 	return "<div style=\"display:none\">" + result + "</div>"
 }
-func RandStr(count int) string {
+func RandStr(minLength int, maxLength int) string {
 	chars := []rune("ABCDEFGHIJKLNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz")
-	count = rand.Intn(count) + 6
+	length := rand.Intn(maxLength-minLength) + minLength
 	result := ""
-	for i := 0; i < count; i++ {
+	for i := 0; i < length; i++ {
 		result = result + string(chars[rand.Intn(len(chars))])
 	}
 	return result
