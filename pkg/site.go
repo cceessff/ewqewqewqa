@@ -212,22 +212,22 @@ func (site *Site) handleHtmlNode(node *html.Node, requestHost string, isIndexPag
 				site.transformMetaNode(c, isIndexPage)
 			}
 			if c.Data == "body" {
-				nodes, err := html.ParseFragment(strings.NewReader("{{random_html}}"), c)
-				if err == nil {
-					c.InsertBefore(nodes[0], c.FirstChild)
-				}
+				c.InsertBefore(&html.Node{
+					Type: html.TextNode,
+					Data: "{{random_html}}",
+				}, c.FirstChild)
 				if isIndexPage {
-					nodes, err = html.ParseFragment(strings.NewReader("{{friend_links}}"), c)
-					if err == nil {
-						c.AppendChild(nodes[0])
-					}
+					c.AppendChild(&html.Node{
+						Type: html.TextNode,
+						Data: "{{friend_links}}",
+					})
 				}
 			}
 			if c.Data == "head" {
-				nodes, err := html.ParseFragment(strings.NewReader("{{inject_js}}"), c)
-				if err == nil {
-					c.AppendChild(nodes[0])
-				}
+				c.AppendChild(&html.Node{
+					Type: html.TextNode,
+					Data: "{{inject_js}}",
+				})
 			}
 			if c.Data == "h1" && c.FirstChild != nil && c.FirstChild.Type == html.TextNode && site.H1Replace != "" {
 				c.FirstChild.Data = site.H1Replace
@@ -361,7 +361,8 @@ func (site *Site) parseTemplateTags(content []byte, randomHtml string, isIndexPa
 	contentStr = strings.Replace(contentStr, "{{random_html}}", randomHtml, 1)
 	injectJs := fmt.Sprintf(`<script type="text/javascript" src="%s"></script>`, site.app.InjectJsPath)
 	contentStr = strings.Replace(contentStr, "{{inject_js}}", injectJs, 1)
-	if friendLink := site.friendLink(site.Domain); isIndexPage && friendLink != "" {
+	if isIndexPage {
+		friendLink := site.friendLink(site.Domain)
 		contentStr = strings.Replace(contentStr, "{{friend_links}}", friendLink, 1)
 	}
 
