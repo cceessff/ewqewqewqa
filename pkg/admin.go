@@ -461,7 +461,7 @@ func (admin *AdminModule) siteImport(writer http.ResponseWriter, request *http.R
 		return
 	}
 	rows := f.GetRows("Sheet1")
-	var configs = make([]SiteConfig, 0)
+	var configs = make([]*SiteConfig, 0)
 	for k, row := range rows {
 		if k == 0 {
 			continue
@@ -495,7 +495,7 @@ func (admin *AdminModule) siteImport(writer http.ResponseWriter, request *http.R
 			BaiduPushKey:     row[12],
 			SmPushKey:        row[13],
 		}
-		configs = append(configs, siteConfig)
+		configs = append(configs, &siteConfig)
 	}
 	err = admin.dao.AddMulti(configs)
 	if err != nil {
@@ -503,8 +503,8 @@ func (admin *AdminModule) siteImport(writer http.ResponseWriter, request *http.R
 		return
 	}
 
-	for _, data := range configs {
-		err := admin.app.MakeSite(&data)
+	for i := range configs {
+		err := admin.app.MakeSite(configs[i])
 		if err != nil {
 			admin.app.Logger.Error(err.Error())
 		}

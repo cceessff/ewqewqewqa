@@ -132,8 +132,8 @@ func startCmd() {
 		RecordChann: make(chan *pkg.Record, 500),
 		Finish:      make(chan int, 1),
 	}
-	for _, siteConfig := range siteConfigs {
-		err = app.MakeSite(&siteConfig)
+	for i := range siteConfigs {
+		err = app.MakeSite(siteConfigs[i])
 		if err != nil {
 			logger.Fatal("make Site", err.Error())
 			return

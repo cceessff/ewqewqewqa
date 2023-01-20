@@ -86,12 +86,12 @@ func (dao *Dao) DeleteOne(id int) error {
 	}
 	return nil
 }
-func (dao *Dao) GetAll() ([]SiteConfig, error) {
+func (dao *Dao) GetAll() ([]*SiteConfig, error) {
 	rs, err := dao.db.Query("select id, domain,url,index_title,index_keywords,index_description,finds,replaces,need_js,s2t,cache_enable,title_replace,h1replace,cache_time,baidu_push_key,sm_push_key from website_config")
 	if err != nil {
 		return nil, err
 	}
-	var results = make([]SiteConfig, 0)
+	var results = make([]*SiteConfig, 0)
 	for rs.Next() {
 		var siteConfig SiteConfig
 		var findsStr, replStr string
@@ -106,7 +106,7 @@ func (dao *Dao) GetAll() ([]SiteConfig, error) {
 		}
 		siteConfig.Finds = strings.Split(findsStr, ";")
 		siteConfig.Replaces = strings.Split(replStr, ";")
-		results = append(results, siteConfig)
+		results = append(results, &siteConfig)
 	}
 	_ = rs.Close()
 	return results, nil
@@ -157,7 +157,7 @@ func (dao *Dao) GetByPage(page, limit int) ([]SiteConfig, error) {
 	_ = rs.Close()
 	return results, nil
 }
-func (dao *Dao) AddMulti(configs []SiteConfig) error {
+func (dao *Dao) AddMulti(configs []*SiteConfig) error {
 	tx, err := dao.db.Begin()
 	if err != nil {
 		return err
