@@ -94,13 +94,9 @@ func (site *Site) Route(writer http.ResponseWriter, request *http.Request) {
 			for key, values := range cacheResponse.Header {
 				writer.Header()[key] = values
 			}
-			if cacheResponse.StatusCode != 0 {
-				writer.WriteHeader(cacheResponse.StatusCode)
-			} else {
-				writer.WriteHeader(200)
-			}
+
 			contentType := strings.ToLower(cacheResponse.Header.Get("Content-Type"))
-			var content = cacheResponse.Body
+			var content []byte = cacheResponse.Body
 			if strings.Contains(contentType, "text/html") {
 				isIndexPage := isIndexPage(request.URL)
 				isSpider := site.isCrawler(ua)
@@ -115,10 +111,14 @@ func (site *Site) Route(writer http.ResponseWriter, request *http.Request) {
 			}
 			contentLength := int64(len(content))
 			writer.Header().Set("Content-Length", strconv.FormatInt(contentLength, 10))
-
+			if cacheResponse.StatusCode != 0 {
+				writer.WriteHeader(cacheResponse.StatusCode)
+			} else {
+				writer.WriteHeader(200)
+			}
 			_, err := writer.Write(content)
 			if err != nil {
-				site.app.Logger.Error("写出错误：", err.Error(), request.URL)
+				site.app.Logger.Error("写出错误：", err.Error(), requestHost, request.URL)
 			}
 			return
 		}
