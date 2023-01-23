@@ -103,28 +103,15 @@ func (app *App) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 		return
 	}
 	host := GetHost(request)
-	item, ok := app.Sites.Load(host)
-	if !ok {
-		hostParts := strings.Split(host, ".")
-
-		if IsDoubleSuffixDomain(host) {
-			host = strings.Join(hostParts[len(hostParts)-3:], ".")
-		} else {
-			host = strings.Join(hostParts[len(hostParts)-2:], ".")
-		}
-		item, ok = app.Sites.Load(host)
-		if !ok {
-			_, _ = writer.Write([]byte("未找到该代理域名，请检查配置 " + host))
-			return
-		}
-
+	site, err := app.querySite(host)
+	if err != nil {
+		writer.Write([]byte(err.Error()))
+		return
 	}
-	site := item.(*Site)
 	if site.Schema == "" {
-		site.Schema = request.Header.Get("scheme")
+		site.Schema = request.Header.Get("schema")
 	}
 	site.Route(writer, request)
-
 }
 func (app *App) Auth() error {
 	if expire, err := time.Parse("2006-01-02", app.ExpireDate); err != nil || expire.Unix() < time.Now().Unix() {
@@ -136,6 +123,18 @@ func (app *App) Auth() error {
 func (app *App) MakeSite(siteConfig *SiteConfig) error {
 	return NewSite(siteConfig, app)
 
+}
+
+func (app *App) querySite(host string) (*Site, error) {
+	hostParts := strings.Split(host, ".")
+	if len(hostParts) == 1 {
+		return nil, errors.New("站点不存在，请检查配置")
+	}
+	item, ok := app.Sites.Load(host)
+	if ok {
+		return item.(*Site), nil
+	}
+	return app.querySite(strings.Join(hostParts[1:], "."))
 }
 func (app *App) AddRecord(domain, path, userAgent string) {
 

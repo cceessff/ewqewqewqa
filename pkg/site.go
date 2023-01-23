@@ -91,10 +91,6 @@ func (site *Site) Route(writer http.ResponseWriter, request *http.Request) {
 	cacheKey := site.Domain + request.URL.Path + request.URL.RawQuery
 	if site.CacheEnable {
 		if cacheResponse := site.getCache(cacheKey, false); cacheResponse != nil {
-			for key, values := range cacheResponse.Header {
-				writer.Header()[key] = values
-			}
-
 			contentType := strings.ToLower(cacheResponse.Header.Get("Content-Type"))
 			var content []byte = cacheResponse.Body
 			if strings.Contains(contentType, "text/html") {
@@ -108,6 +104,10 @@ func (site *Site) Route(writer http.ResponseWriter, request *http.Request) {
 				content = GBk2UTF8(content, contentType)
 				contentStr := site.replaceHost(string(content), requestHost)
 				content = []byte(contentStr)
+			}
+
+			for key, values := range cacheResponse.Header {
+				writer.Header()[key] = values
 			}
 			contentLength := int64(len(content))
 			writer.Header().Set("Content-Length", strconv.FormatInt(contentLength, 10))
@@ -184,9 +184,6 @@ func (site *Site) handleRedirectResponse(response *http.Response, host string) e
 	}
 	redirectUrl.Host = host
 	redirectUrl.Scheme = site.Schema
-	// if !isIndexPage(redirectUrl) {
-	// 	site.EncodeUrl(redirectUrl)
-	// }
 	response.Header.Set("Location", redirectUrl.String())
 	return nil
 }
@@ -427,18 +424,17 @@ func (site *Site) handleHtmlContent(content []byte, requestHost string, contentT
 
 func (site *Site) readResponse(response *http.Response) ([]byte, error) {
 	contentEncoding := response.Header.Get("Content-Encoding")
-	var content []byte
-	var err error
+	//var content []byte
+	//var err error
 	if contentEncoding == "gzip" {
 		reader, gzipErr := gzip.NewReader(response.Body)
 		if gzipErr != nil {
-			return content, gzipErr
+			return nil, gzipErr
 		}
-		content, err = ioutil.ReadAll(reader)
-	} else {
-		content, err = ioutil.ReadAll(response.Body)
+		return ioutil.ReadAll(reader)
 	}
-	return content, err
+	return ioutil.ReadAll(response.Body)
+
 }
 
 func (site *Site) EncodeUrl(u *url.URL) {
@@ -509,10 +505,6 @@ func (site *Site) replaceHost(content string, requestHost string) string {
 }
 func (site *Site) transformTitleNode(node *html.Node, isIndexPage bool) {
 	if isIndexPage {
-		if node.FirstChild != nil && node.FirstChild.Type == html.TextNode {
-			node.FirstChild.Data = "{{index_title}}"
-			return
-		}
 		node.FirstChild = &html.Node{
 			Type: html.TextNode,
 			Data: "{{index_title}}",
@@ -533,8 +525,8 @@ func (site *Site) transformTitleNode(node *html.Node, isIndexPage bool) {
 }
 
 func (site *Site) setCache(url string, statusCode int, header http.Header, content []byte, randomHtml string) error {
-	if strings.Contains(strings.ToLower(header.Get("Content-Type")), "charset") {
-		contentType := header.Get("Content-Type")
+	contentType := header.Get("Content-Type")
+	if strings.Contains(strings.ToLower(contentType), "charset") {
 		contentPartArr := strings.Split(contentType, ";")
 		header.Set("Content-Type", contentPartArr[0]+"; charset=utf-8")
 	}
@@ -653,9 +645,7 @@ func (site *Site) ErrorHandler(writer http.ResponseWriter, request *http.Request
 		return
 
 	}
-	for s, i := range cacheResponse.Header {
-		writer.Header()[s] = i
-	}
+
 	var content = cacheResponse.Body
 	contentType := strings.ToLower(cacheResponse.Header.Get("Content-Type"))
 	if strings.Contains(contentType, "text/html") {
@@ -669,6 +659,10 @@ func (site *Site) ErrorHandler(writer http.ResponseWriter, request *http.Request
 		content = GBk2UTF8(content, contentType)
 		contentStr := site.replaceHost(string(content), requestHost)
 		content = []byte(contentStr)
+	}
+
+	for s, i := range cacheResponse.Header {
+		writer.Header()[s] = i
 	}
 	contentLength := int64(len(content))
 	writer.Header().Set("Content-Length", strconv.FormatInt(contentLength, 10))
