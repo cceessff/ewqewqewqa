@@ -97,7 +97,7 @@ func (site *Site) Route(writer http.ResponseWriter, request *http.Request) {
 				isIndexPage := isIndexPage(request.URL)
 				isSpider := site.isCrawler(ua)
 				content = site.handleHtmlResponse(content, isIndexPage, isSpider, contentType, requestHost, cacheResponse.RandomHtml)
-				if isSpider {
+				if isSpider && cacheResponse.StatusCode == 200 {
 					site.app.AddRecord(requestHost, request.URL.Path, ua)
 				}
 			} else if strings.Contains(contentType, "css") || strings.Contains(contentType, "javascript") {
@@ -652,7 +652,7 @@ func (site *Site) ErrorHandler(writer http.ResponseWriter, request *http.Request
 		isIndexPage := isIndexPage(request.URL)
 		isSpider := site.isCrawler(ua)
 		content = site.handleHtmlResponse(content, isIndexPage, isSpider, contentType, requestHost, cacheResponse.RandomHtml)
-		if isSpider {
+		if isSpider && cacheResponse.StatusCode == 200 {
 			site.app.AddRecord(requestHost, request.URL.Path, ua)
 		}
 	} else if strings.Contains(contentType, "css") || strings.Contains(contentType, "javascript") {

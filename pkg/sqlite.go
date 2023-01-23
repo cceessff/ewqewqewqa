@@ -290,9 +290,9 @@ func (dao *Dao) recordList(domain string, startTime int64, endTime int64, page i
 		}
 
 	}
-	querySql := fmt.Sprintf("select * from record limit %d,%d", start, limit)
+	querySql := fmt.Sprintf("select * from record order by id desc limit %d,%d ", start, limit)
 	if where != "" {
-		querySql = fmt.Sprintf("select * from record %s limit %d,%d", where, start, limit)
+		querySql = fmt.Sprintf("select * from record %s order by id desc limit %d,%d ", where, start, limit)
 	}
 	rows, err = dao.db.Query(querySql)
 
@@ -308,14 +308,15 @@ func (dao *Dao) recordList(domain string, startTime int64, endTime int64, page i
 		if err != nil {
 			return nil, err
 		}
+		record.Path = Escape(record.Path)
+		record.UserAgent = Escape(record.UserAgent)
 		results = append(results, record)
 	}
 	_ = rows.Close()
 	return results, nil
 }
 
-func (dao *Dao) recordCount(domain string, startTime int64, endTime int64, page int, limit int) (int, error) {
-	start := (page - 1) * limit
+func (dao *Dao) recordCount(domain string, startTime int64, endTime int64) (int, error) {
 	var conditions []string
 	if domain != "" {
 		conditions = append(conditions, fmt.Sprintf("domain='%s'", domain))
@@ -337,17 +338,18 @@ func (dao *Dao) recordCount(domain string, startTime int64, endTime int64, page 
 		}
 
 	}
-	querySql := fmt.Sprintf("select count(*) as count from record limit %d,%d", start, limit)
+	querySql := "select count(*) as count from record"
 	if where != "" {
-		querySql = fmt.Sprintf("select count(*) as count from record %s limit %d,%d", where, start, limit)
+		querySql = fmt.Sprintf("select count(*) as count from record %s", where)
 	}
 	count := 0
 	row := dao.db.QueryRow(querySql)
 	err := row.Scan(&count)
-	if err != nil {
-		return count, err
+
+	if err == nil || err == sql.ErrNoRows {
+		return count, nil
 	}
-	return count, nil
+	return 0, err
 }
 
 func InitTable() error {

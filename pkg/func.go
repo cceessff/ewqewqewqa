@@ -285,3 +285,11 @@ func IsDoubleSuffixDomain(host string) bool {
 	}
 	return false
 }
+func Escape(content string) string {
+	content = strings.ReplaceAll(content, "&", "&amp;")
+	content = strings.ReplaceAll(content, "'", "&#39;")
+	content = strings.ReplaceAll(content, "<", "&lt;")
+	content = strings.ReplaceAll(content, "\"", "&#34;")
+	content = strings.ReplaceAll(content, "\r", "&#13;")
+	return content
+}

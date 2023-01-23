@@ -207,7 +207,7 @@ func (admin *AdminModule) recordList(writer http.ResponseWriter, request *http.R
 		_, _ = writer.Write(data)
 		return
 	}
-	count, err := admin.dao.recordCount(domain, startTime, endTime, page, limit)
+	count, err := admin.dao.recordCount(domain, startTime, endTime)
 	if err != nil {
 		result["code"] = 3
 		result["msg"] = err.Error()
