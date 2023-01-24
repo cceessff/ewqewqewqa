@@ -55,6 +55,7 @@ func (admin *AdminModule) Initialize() {
 	admin.adminMux.Handle(prefix+"/site", admin.AuthMiddleware(admin.site))
 	admin.adminMux.Handle(prefix+"/record", admin.AuthMiddleware(admin.record))
 	admin.adminMux.Handle(prefix+"/recordList", admin.AuthMiddleware(admin.recordList))
+	admin.adminMux.Handle(prefix+"/del_record", admin.AuthMiddleware(admin.delRecord))
 	admin.adminMux.Handle(prefix+"/list", admin.AuthMiddleware(admin.siteList))
 	admin.adminMux.Handle(prefix+"/edit", admin.AuthMiddleware(admin.editSite))
 
@@ -219,6 +220,45 @@ func (admin *AdminModule) recordList(writer http.ResponseWriter, request *http.R
 	result["msg"] = ""
 	result["count"] = count
 	result["data"] = records
+	data, _ := json.Marshal(result)
+	_, _ = writer.Write(data)
+
+}
+
+func (admin *AdminModule) delRecord(writer http.ResponseWriter, request *http.Request) {
+	params := request.URL.Query()
+	var result = make(map[string]interface{})
+	var startTime int64 = 0
+	var endTime int64 = 0
+	if startTimeParam := params.Get("start_time"); startTimeParam != "" {
+		timeResult, err := time.ParseInLocation("2006-01-02 15:04:05", startTimeParam, time.Local)
+		if err == nil {
+			startTime = timeResult.Unix()
+		}
+	}
+	if endTimeParam := params.Get("end_time"); endTimeParam != "" {
+		timeResult, err := time.ParseInLocation("2006-01-02 15:04:05", endTimeParam, time.Local)
+		if err == nil {
+			endTime = timeResult.Unix()
+		}
+	}
+	if startTime == 0 || endTime == 0 {
+		result["code"] = 2
+		result["msg"] = "请输入开始时间和结束时间"
+		data, _ := json.Marshal(result)
+		_, _ = writer.Write(data)
+		return
+	}
+	err := admin.dao.DelRecord(startTime, endTime)
+	if err != nil {
+		result["code"] = 3
+		result["msg"] = err.Error()
+		data, _ := json.Marshal(result)
+		_, _ = writer.Write(data)
+		return
+	}
+	result["code"] = 0
+	result["msg"] = "删除成功"
 	data, _ := json.Marshal(result)
 	_, _ = writer.Write(data)
 

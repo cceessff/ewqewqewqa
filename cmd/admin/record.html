@@ -62,6 +62,7 @@
                                         <input class="layui-input" id="end_time" autocomplete="off" placeholder="结束时间">
                                     </div>
                                     <button class="layui-btn" data-type="reload">搜索</button>
+                                    <button class="layui-btn layui-btn-danger" id="del_record">删除记录</button>
                                 </div>
                             </div>
                             <div class="layui-card-body">
@@ -89,23 +90,23 @@
                     , totalRow: true
                     , cellMinWidth: 80
                     , cols: [[
-                        { field: 'id', title: 'ID', fixed: 'left', unresize: true,width:80 }
-                        , { field: 'domain', title: '域名',width:160 }
-                        , { field: 'path', title: '路径',width:160 }
-                        , { field: 'spider', title: '蜘蛛', width:80}
-                        , { field: 'user_agent', title: 'UA'}
-                        , { field: 'created_time', title: '访问时间' ,width:160}
+                        { field: 'id', title: 'ID', fixed: 'left', unresize: true, width: 80 }
+                        , { field: 'domain', title: '域名', width: 160 }
+                        , { field: 'path', title: '路径', width: 160 }
+                        , { field: 'spider', title: '蜘蛛', width: 80 }
+                        , { field: 'user_agent', title: 'UA' }
+                        , { field: 'created_time', title: '访问时间', width: 160 }
                     ]]
                     , parseData: function (res) {
                         if (res.data) {
                             for (let i = 0; i < res.data.length; i++) {
                                 let date = new Date(res.data[i].created_time * 1000);
-                                let year=date.getFullYear();
-                                let month=String((date.getMonth() + 1)).padStart(2,0);
-                                let day=String(date.getDate()).padStart(2,0);
-                                let hours=String(date.getHours()).padStart(2,0);
-                                let minutes=String(date.getMinutes()).padStart(2,0);
-                                let seconds=String(date.getSeconds()).padStart(2,0);
+                                let year = date.getFullYear();
+                                let month = String((date.getMonth() + 1)).padStart(2, 0);
+                                let day = String(date.getDate()).padStart(2, 0);
+                                let hours = String(date.getHours()).padStart(2, 0);
+                                let minutes = String(date.getMinutes()).padStart(2, 0);
+                                let seconds = String(date.getSeconds()).padStart(2, 0);
                                 let formmaterStr = year + "-" + month + "-" + day + " " + hours + ":" + minutes + ":" + seconds;
                                 res.data[i].created_time = formmaterStr;
                             }
@@ -136,6 +137,30 @@
                     let type = jq(this).data('type');
                     active[type] ? active[type].call(this) : '';
                 });
+                jq("#del_record").on('click', () => {
+                    let start_time = jq('#start_time').val();
+                    let end_time = jq("#end_time").val();
+                    if(!start_time||!end_time){
+                        layer.msg("请输入开始时间和结束时间");
+                        return;
+                    }
+                    jq.ajax({
+                        url: '{{.admin_uri}}/del_record?start_time='+start_time+"&end_time="+end_time,
+                        method: 'get',
+                        dataType: "JSON",
+                        success: function (res) {
+                            if (res.code == 0) {
+                                layer.msg("删除成功");
+                                location.reload();
+                            } else {
+                                layer.msg("删除失败：" + res.msg);
+                            }
+                        },
+                        error: function (data) {
+                            layer.msg("删除失败：" + data);
+                        }
+                    });
+                })
             });
         </script>
     </div>
