@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"seo/mirror/pkg"
 	"strconv"
+	"sync"
 	"syscall"
 	"time"
 
@@ -131,6 +132,11 @@ func startCmd() {
 		Logger:      logger,
 		RecordChann: make(chan *pkg.Record, 500),
 		Finish:      make(chan int, 1),
+		CustomResponsePool: &sync.Pool{
+			New: func() any {
+				return new(pkg.CustomResponse)
+			},
+		},
 	}
 	for i := range siteConfigs {
 		err = app.MakeSite(siteConfigs[i])

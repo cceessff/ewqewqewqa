@@ -33,14 +33,15 @@ type App struct {
 	*AppConfig
 	Dao *Dao
 	*http.Server
-	AdminServer *http.Server
-	Sites       sync.Map
-	S2T         *opencc.OpenCC
-	IpList      []net.IP
-	ExpireDate  string
-	Logger      *slog.Logger
-	RecordChann chan *Record
-	Finish      chan int
+	AdminServer        *http.Server
+	Sites              sync.Map
+	S2T                *opencc.OpenCC
+	IpList             []net.IP
+	ExpireDate         string
+	Logger             *slog.Logger
+	RecordChann        chan *Record
+	Finish             chan int
+	CustomResponsePool *sync.Pool
 }
 
 func (app *App) Start() {
