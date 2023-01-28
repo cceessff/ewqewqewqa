@@ -258,7 +258,7 @@ func (site *Site) handleHtmlNode(node *html.Node, requestHost string, isIndexPag
 				}
 				node.Attr[i].Val = attr.Val
 				if site.S2t {
-					node.Attr[i].Val, _ = site.app.S2T.ConvertText(attr.Val)
+					node.Attr[i].Val, _ = site.app.S2T.Convert(attr.Val)
 				}
 			}
 		}
@@ -321,7 +321,7 @@ func (site *Site) transformText(text string, requestHost string) string {
 	if site.S2t {
 		chineseRegexp, _ := regexp.Compile("^[\u4e00-\u9fa5]+")
 		text = chineseRegexp.ReplaceAllStringFunc(text, func(s string) string {
-			result, _ := site.app.S2T.ConvertText(s)
+			result, _ := site.app.S2T.Convert(s)
 			return result
 		})
 	}
@@ -419,7 +419,7 @@ func (site *Site) handleHtmlContent(content []byte, requestHost string, contentT
 		return content
 	}
 	var replacedH1 bool = false
-	if c := document.FirstChild; c != nil {
+	for c := document.FirstChild; c != nil; c = c.NextSibling {
 		site.handleHtmlNode(c, requestHost, isIndexPage, &replacedH1)
 		if !replacedH1 && c.FirstChild != nil && c.FirstChild.NextSibling != nil && site.H1Replace != "" {
 			c.FirstChild.NextSibling.InsertBefore(&html.Node{
@@ -430,8 +430,10 @@ func (site *Site) handleHtmlContent(content []byte, requestHost string, contentT
 					Data: site.H1Replace,
 				},
 			}, c.FirstChild.NextSibling.FirstChild)
+
 		}
 	}
+
 	var buf bytes.Buffer
 	err = html.Render(&buf, document)
 	if err != nil {

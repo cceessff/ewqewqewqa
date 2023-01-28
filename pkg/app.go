@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/gookit/slog"
-	"github.com/sgoby/opencc"
+	"github.com/liuzl/gocc"
 	"golang.org/x/net/netutil"
 )
 
@@ -35,7 +35,7 @@ type App struct {
 	*http.Server
 	AdminServer *http.Server
 	Sites       sync.Map
-	S2T         *opencc.OpenCC
+	S2T         *gocc.OpenCC
 	IpList      []net.IP
 	ExpireDate  string
 	Logger      *slog.Logger

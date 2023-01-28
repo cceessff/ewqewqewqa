@@ -17,7 +17,7 @@ import (
 	"github.com/gookit/slog"
 	"github.com/gookit/slog/handler"
 	"github.com/gookit/slog/rotatefile"
-	"github.com/sgoby/opencc"
+	"github.com/liuzl/gocc"
 )
 
 func main() {
@@ -64,19 +64,10 @@ func main() {
 			err = process.Signal(syscall.SIGKILL)
 		} else {
 			err = process.Signal(syscall.SIGTERM)
-			// err = syscall.Kill(pid, syscall.SIGTERM)
-			// if err != nil {
-			// 	fmt.Println("read pid error", err.Error())
-			// 	return
-			// }
 		}
 		if err != nil {
-			fmt.Println(" process.Signal error", err.Error())
+			fmt.Println("process.Signal error", err.Error())
 			return
-		}
-		err = os.Remove("pid")
-		if err != nil {
-			fmt.Println("删除pid文件失败,请手动删除")
 		}
 		fmt.Println("镜像程序已关闭")
 
@@ -92,7 +83,6 @@ func startCmd() {
 	})
 	logger := slog.NewWithHandlers(handler)
 	defer logger.Close()
-	logger.Info("start log")
 	err := pkg.InitTable()
 	if err != nil {
 		logger.Error("init table error", err.Error())
@@ -104,7 +94,7 @@ func startCmd() {
 		return
 	}
 	//繁体
-	s2t, err := opencc.NewOpenCC("s2t")
+	s2t, err := gocc.New("s2t")
 	if err != nil {
 		logger.Error("转繁体功能错误", err.Error())
 		return
@@ -147,7 +137,7 @@ func startCmd() {
 	app.Start()
 	// 捕获kill的信号
 	sigTERM := make(chan os.Signal, 1)
-	signal.Notify(sigTERM, syscall.SIGTERM)
+	signal.Notify(sigTERM, syscall.SIGTERM, syscall.Signal(16))
 	// 收到信号前会一直阻塞
 
 	<-sigTERM
