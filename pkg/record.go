@@ -16,7 +16,7 @@ type Record struct {
 
 func (dao *Dao) AddRecord(record *Record) error {
 	insertSql := `insert  into record(domain,path,user_agent,spider,created_time)values (?,?,?,?,?)`
-	_, err := dao.db.Exec(insertSql, record.Domain, record.Path, record.UserAgent, record.Spider, record.CreatedTime)
+	_, err := dao.Exec(insertSql, record.Domain, record.Path, record.UserAgent, record.Spider, record.CreatedTime)
 	if err != nil {
 		return err
 	}
@@ -25,7 +25,7 @@ func (dao *Dao) AddRecord(record *Record) error {
 
 func (dao *Dao) DelRecord(startTime, endTime int64) error {
 	deleteSql := `delete from record where created_time>? and created_time<?`
-	_, err := dao.db.Exec(deleteSql, startTime, endTime)
+	_, err := dao.Exec(deleteSql, startTime, endTime)
 	if err != nil {
 		return err
 	}
@@ -61,7 +61,7 @@ func (dao *Dao) recordList(domain string, startTime int64, endTime int64, page i
 	if where != "" {
 		querySql = fmt.Sprintf("select * from record %s order by id desc limit %d,%d ", where, start, limit)
 	}
-	rows, err = dao.db.Query(querySql)
+	rows, err = dao.Query(querySql)
 
 	if err != nil {
 		return nil, err
@@ -110,7 +110,7 @@ func (dao *Dao) recordCount(domain string, startTime int64, endTime int64) (int,
 		querySql = fmt.Sprintf("select count(*) as count from record %s", where)
 	}
 	count := 0
-	row := dao.db.QueryRow(querySql)
+	row := dao.QueryRow(querySql)
 	err := row.Scan(&count)
 
 	if err == nil || err == sql.ErrNoRows {

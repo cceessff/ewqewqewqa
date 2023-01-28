@@ -10,42 +10,39 @@ import (
 )
 
 type SiteConfig struct {
-	Id                  int      `json:"id"`
-	Domain              string   `json:"domain"`
-	Url                 string   `json:"url"`
-	IndexTitle          string   `json:"index_title"`
-	IndexKeywords       string   `json:"index_keywords"`
-	IndexDescription    string   `json:"index_description"`
-	Finds               []string `json:"finds"`
-	Replaces            []string `json:"replaces"`
-	TraditionalReplaces []string `json:"traditional_replaces"`
-	NeedJs              bool     `json:"need_js"`
-	S2t                 bool     `json:"s2t"`
-	TitleReplace        bool     `json:"title_replace"`
-	H1Replace           string   `json:"h1replace"`
-	CacheTime           int64    `json:"cache_time"`
-	CacheEnable         bool     `json:"cache_enable"`
-	BaiduPushKey        string   `json:"baidu_push_key"`
-	SmPushKey           string   `json:"sm_push_key"`
+	Id               int      `json:"id"`
+	Domain           string   `json:"domain"`
+	Url              string   `json:"url"`
+	IndexTitle       string   `json:"index_title"`
+	IndexKeywords    string   `json:"index_keywords"`
+	IndexDescription string   `json:"index_description"`
+	Finds            []string `json:"finds"`
+	Replaces         []string `json:"replaces"`
+	NeedJs           bool     `json:"need_js"`
+	S2t              bool     `json:"s2t"`
+	TitleReplace     bool     `json:"title_replace"`
+	H1Replace        string   `json:"h1replace"`
+	CacheTime        int64    `json:"cache_time"`
+	CacheEnable      bool     `json:"cache_enable"`
+	BaiduPushKey     string   `json:"baidu_push_key"`
+	SmPushKey        string   `json:"sm_push_key"`
 }
 
 type Dao struct {
-	db *sql.DB
+	*sql.DB
 }
 
 func NewDao() (*Dao, error) {
-	dao := &Dao{}
 	db, err := sql.Open("sqlite3", "config/data.db")
 	if err != nil {
 		return nil, err
 	}
-	dao.db = db
-	return dao, nil
+	return &Dao{db}, nil
 }
 func (dao *Dao) GetOne(domain string) (SiteConfig, error) {
 	domain = strings.TrimSpace(domain)
 	var siteConfig SiteConfig
-	rs, err := dao.db.Query("select id,domain,url,index_title,index_keywords,index_description,finds,replaces,need_js,s2t,cache_enable,title_replace,h1replace,cache_time,baidu_push_key,sm_push_key from website_config where domain=?", domain)
+	rs, err := dao.Query("select id,domain,url,index_title,index_keywords,index_description,finds,replaces,need_js,s2t,cache_enable,title_replace,h1replace,cache_time,baidu_push_key,sm_push_key from website_config where domain=?", domain)
 	if err != nil {
 		return siteConfig, err
 	}
@@ -80,14 +77,14 @@ func (dao *Dao) GetOne(domain string) (SiteConfig, error) {
 
 }
 func (dao *Dao) DeleteOne(id int) error {
-	_, err := dao.db.Exec("delete from website_config where id=?", id)
+	_, err := dao.Exec("delete from website_config where id=?", id)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 func (dao *Dao) GetAll() ([]*SiteConfig, error) {
-	rs, err := dao.db.Query("select id, domain,url,index_title,index_keywords,index_description,finds,replaces,need_js,s2t,cache_enable,title_replace,h1replace,cache_time,baidu_push_key,sm_push_key from website_config")
+	rs, err := dao.Query("select id, domain,url,index_title,index_keywords,index_description,finds,replaces,need_js,s2t,cache_enable,title_replace,h1replace,cache_time,baidu_push_key,sm_push_key from website_config")
 	if err != nil {
 		return nil, err
 	}
@@ -114,7 +111,7 @@ func (dao *Dao) GetAll() ([]*SiteConfig, error) {
 }
 func (dao *Dao) addOne(data SiteConfig) error {
 	insertSql := `insert  into website_config(domain,url,index_title,index_keywords,index_description,finds,replaces,need_js,s2t,cache_enable,title_replace,h1replace,cache_time,baidu_push_key,sm_push_key)values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
-	_, err := dao.db.Exec(insertSql, data.Domain, data.Url, data.IndexTitle, data.IndexKeywords, data.IndexDescription, strings.Join(data.Finds, ";"), strings.Join(data.Replaces, ";"), data.NeedJs, data.S2t, data.CacheEnable, data.TitleReplace, data.H1Replace, data.CacheTime, data.BaiduPushKey, data.SmPushKey)
+	_, err := dao.Exec(insertSql, data.Domain, data.Url, data.IndexTitle, data.IndexKeywords, data.IndexDescription, strings.Join(data.Finds, ";"), strings.Join(data.Replaces, ";"), data.NeedJs, data.S2t, data.CacheEnable, data.TitleReplace, data.H1Replace, data.CacheTime, data.BaiduPushKey, data.SmPushKey)
 	if err != nil {
 		return err
 	}
@@ -122,7 +119,7 @@ func (dao *Dao) addOne(data SiteConfig) error {
 }
 func (dao *Dao) UpdateById(data SiteConfig) error {
 	updateSql := "update website_config set url=?,domain=?,index_title=?,index_keywords=?,index_description=?,finds=?,replaces=?,need_js=?,s2t=?,cache_enable=?,title_replace=?,h1replace=?,cache_time=?,baidu_push_key=?,sm_push_key=? where id=?"
-	_, err := dao.db.Exec(updateSql, data.Url, data.Domain, data.IndexTitle, data.IndexKeywords, data.IndexDescription, strings.Join(data.Finds, ";"), strings.Join(data.Replaces, ";"), data.NeedJs, data.S2t, data.CacheEnable, data.TitleReplace, data.H1Replace, data.CacheTime, data.BaiduPushKey, data.SmPushKey, data.Id)
+	_, err := dao.Exec(updateSql, data.Url, data.Domain, data.IndexTitle, data.IndexKeywords, data.IndexDescription, strings.Join(data.Finds, ";"), strings.Join(data.Replaces, ";"), data.NeedJs, data.S2t, data.CacheEnable, data.TitleReplace, data.H1Replace, data.CacheTime, data.BaiduPushKey, data.SmPushKey, data.Id)
 	if err != nil {
 		return err
 	}
@@ -132,7 +129,7 @@ func (dao *Dao) UpdateById(data SiteConfig) error {
 func (dao *Dao) GetByPage(page, limit int) ([]SiteConfig, error) {
 	start := (page - 1) * limit
 	querySql := fmt.Sprintf("select * from website_config limit %d,%d", start, limit)
-	rs, err := dao.db.Query(querySql)
+	rs, err := dao.Query(querySql)
 	if err != nil {
 		return nil, err
 	}
@@ -158,7 +155,7 @@ func (dao *Dao) GetByPage(page, limit int) ([]SiteConfig, error) {
 	return results, nil
 }
 func (dao *Dao) AddMulti(configs []*SiteConfig) error {
-	tx, err := dao.db.Begin()
+	tx, err := dao.Begin()
 	if err != nil {
 		return err
 	}
@@ -183,7 +180,7 @@ func (dao *Dao) MultiDel(domains []string) error {
 		args[i] = id
 	}
 	delSql := `delete from website_config where domain in (?` + strings.Repeat(",?", len(args)-1) + `)`
-	_, err := dao.db.Exec(delSql, args...)
+	_, err := dao.Exec(delSql, args...)
 	if err != nil {
 		return err
 	}
@@ -193,7 +190,7 @@ func (dao *Dao) MultiDel(domains []string) error {
 
 func (dao *Dao) Count() (int, error) {
 	countSql := `select count(*) as count from website_config`
-	rs, err := dao.db.Query(countSql)
+	rs, err := dao.Query(countSql)
 	if err != nil {
 		return 0, err
 	}
@@ -212,7 +209,7 @@ func (dao *Dao) Count() (int, error) {
 }
 func (dao *Dao) ForbiddenWordReplace(forbiddenWord, replaceWord, splitWord string) ([]string, error) {
 	forbiddenSql := "select domain,index_title from website_config where index_title like ?"
-	rs, err := dao.db.Query(forbiddenSql, "%"+forbiddenWord+"%")
+	rs, err := dao.Query(forbiddenSql, "%"+forbiddenWord+"%")
 	if err != nil {
 		return nil, err
 	}
@@ -245,7 +242,7 @@ func (dao *Dao) ForbiddenWordReplace(forbiddenWord, replaceWord, splitWord strin
 				}
 			}
 			newTitle := strings.Join(words, splitWord)
-			_, err := dao.db.Exec(updateSql, newTitle, title)
+			_, err := dao.Exec(updateSql, newTitle, title)
 			if err != nil {
 				return nil, err
 			}
