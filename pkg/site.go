@@ -54,6 +54,11 @@ var BufferPool *sync.Pool = &sync.Pool{
 		return bytes.NewBuffer(make([]byte, 512))
 	},
 }
+var CustomResponsePool *sync.Pool = &sync.Pool{
+	New: func() any {
+		return new(CustomResponse)
+	},
+}
 
 func NewSite(siteConfig *SiteConfig, app *App) error {
 	u, err := url.Parse(siteConfig.Url)
@@ -98,6 +103,7 @@ func (site *Site) Route(writer http.ResponseWriter, request *http.Request) {
 	cacheKey := site.Domain + request.URL.Path + request.URL.RawQuery
 	if site.CacheEnable {
 		if cacheResponse := site.getCache(cacheKey, false); cacheResponse != nil {
+			defer CustomResponsePool.Put(cacheResponse)
 			contentType := strings.ToLower(cacheResponse.Header.Get("Content-Type"))
 			var content []byte = cacheResponse.Body
 			if strings.Contains(contentType, "text/html") {
@@ -124,7 +130,6 @@ func (site *Site) Route(writer http.ResponseWriter, request *http.Request) {
 				writer.WriteHeader(200)
 			}
 			_, err := writer.Write(content)
-			site.app.CustomResponsePool.Put(cacheResponse)
 			if err != nil {
 				site.app.Logger.Error("写出错误：", err.Error(), requestHost, request.URL)
 			}
@@ -150,6 +155,10 @@ func (site *Site) ModifyResponse(response *http.Response) error {
 		if err != nil {
 			return err
 		}
+		defer func() {
+			buffer.Reset()
+			BufferPool.Put(buffer)
+		}()
 		content := buffer.Bytes()
 
 		contentType := strings.ToLower(response.Header.Get("Content-Type"))
@@ -197,65 +206,65 @@ func (site *Site) handleRedirectResponse(response *http.Response, host string) e
 	return nil
 }
 func (site *Site) handleHtmlNode(node *html.Node, requestHost string, isIndexPage bool, replacedH1 *bool) {
-	for c := node.FirstChild; c != nil; c = c.NextSibling {
-		switch c.Type {
-		case html.TextNode, html.CommentNode, html.RawNode:
-			c.Data = site.transformText(c.Data, requestHost)
-		case html.ElementNode:
-			if c.Data == "a" {
-				site.transformANode(c, requestHost)
-			}
-			if c.Data == "link" {
-				site.transformLinkNode(c, requestHost)
-			}
-			if c.Data == "title" {
-				site.transformTitleNode(c, isIndexPage)
-			}
-			if c.Data == "script" {
-				site.transformScriptNode(c)
-			}
-			if c.Data == "meta" {
-				site.transformMetaNode(c, isIndexPage)
-			}
-			if c.Data == "body" {
-				c.InsertBefore(&html.Node{
+	switch node.Type {
+	case html.TextNode, html.CommentNode, html.RawNode:
+		node.Data = site.transformText(node.Data, requestHost)
+	case html.ElementNode:
+		if node.Data == "a" {
+			site.transformANode(node, requestHost)
+		}
+		if node.Data == "link" {
+			site.transformLinkNode(node, requestHost)
+		}
+		if node.Data == "title" {
+			site.transformTitleNode(node, isIndexPage)
+		}
+		if node.Data == "script" {
+			site.transformScriptNode(node)
+		}
+		if node.Data == "meta" {
+			site.transformMetaNode(node, isIndexPage)
+		}
+		if node.Data == "body" {
+			node.InsertBefore(&html.Node{
+				Type: html.TextNode,
+				Data: "{{random_html}}",
+			}, node.FirstChild)
+			if isIndexPage {
+				node.AppendChild(&html.Node{
 					Type: html.TextNode,
-					Data: "{{random_html}}",
-				}, c.FirstChild)
-				if isIndexPage {
-					c.AppendChild(&html.Node{
-						Type: html.TextNode,
-						Data: "{{friend_links}}",
-					})
-				}
-			}
-			if c.Data == "head" {
-				c.AppendChild(&html.Node{
-					Type: html.TextNode,
-					Data: "{{inject_js}}",
+					Data: "{{friend_links}}",
 				})
 			}
-			if c.Data == "h1" && c.FirstChild != nil && c.FirstChild.Type == html.TextNode && site.H1Replace != "" {
-				c.FirstChild.Data = site.H1Replace
-				*replacedH1 = true
-			}
-			for i, attr := range c.Attr {
-				if attr.Key == "href" || attr.Key == "src" {
-					c.Attr[i].Val = site.replaceHost(attr.Val, requestHost)
-				}
-				if attr.Key == "title" || attr.Key == "alt" || attr.Key == "value" || attr.Key == "placeholder" {
-					for index, find := range site.Finds {
-						tag := fmt.Sprintf("{{replace:%d}}", index)
-						attr.Val = strings.ReplaceAll(attr.Val, find, tag)
-					}
-					c.Attr[i].Val = attr.Val
-					if site.S2t {
-						c.Attr[i].Val, _ = site.app.S2T.ConvertText(attr.Val)
-					}
-				}
-			}
-
 		}
+		if node.Data == "head" {
+			node.AppendChild(&html.Node{
+				Type: html.TextNode,
+				Data: "{{inject_js}}",
+			})
+		}
+		if node.Data == "h1" && node.FirstChild != nil && node.FirstChild.Type == html.TextNode && site.H1Replace != "" {
+			node.FirstChild.Data = site.H1Replace
+			*replacedH1 = true
+		}
+		for i, attr := range node.Attr {
+			if attr.Key == "href" || attr.Key == "src" {
+				node.Attr[i].Val = site.replaceHost(attr.Val, requestHost)
+			}
+			if attr.Key == "title" || attr.Key == "alt" || attr.Key == "value" || attr.Key == "placeholder" {
+				for index, find := range site.Finds {
+					tag := fmt.Sprintf("{{replace:%d}}", index)
+					attr.Val = strings.ReplaceAll(attr.Val, find, tag)
+				}
+				node.Attr[i].Val = attr.Val
+				if site.S2t {
+					node.Attr[i].Val, _ = site.app.S2T.ConvertText(attr.Val)
+				}
+			}
+		}
+
+	}
+	for c := node.FirstChild; c != nil; c = c.NextSibling {
 		site.handleHtmlNode(c, requestHost, isIndexPage, replacedH1)
 	}
 }
@@ -310,7 +319,11 @@ func (site *Site) transformText(text string, requestHost string) string {
 	}
 	text = site.replaceHost(text, requestHost)
 	if site.S2t {
-		text, _ = site.app.S2T.ConvertText(text)
+		chineseRegexp, _ := regexp.Compile("^[\u4e00-\u9fa5]+")
+		text = chineseRegexp.ReplaceAllStringFunc(text, func(s string) string {
+			result, _ := site.app.S2T.ConvertText(s)
+			return result
+		})
 	}
 	return text
 }
@@ -406,7 +419,7 @@ func (site *Site) handleHtmlContent(content []byte, requestHost string, contentT
 		return content
 	}
 	var replacedH1 bool = false
-	for c := document.FirstChild; c != nil; c = c.NextSibling {
+	if c := document.FirstChild; c != nil {
 		site.handleHtmlNode(c, requestHost, isIndexPage, &replacedH1)
 		if !replacedH1 && c.FirstChild != nil && c.FirstChild.NextSibling != nil && site.H1Replace != "" {
 			c.FirstChild.NextSibling.InsertBefore(&html.Node{
@@ -419,16 +432,13 @@ func (site *Site) handleHtmlContent(content []byte, requestHost string, contentT
 			}, c.FirstChild.NextSibling.FirstChild)
 		}
 	}
-
 	var buf bytes.Buffer
 	err = html.Render(&buf, document)
 	if err != nil {
 		site.app.Logger.Error("html render error", err.Error())
 		return content
 	}
-
 	return buf.Bytes()
-
 }
 
 func (site *Site) readResponse(response *http.Response) (*bytes.Buffer, error) {
@@ -545,12 +555,12 @@ func (site *Site) setCache(url string, statusCode int, header http.Header, conte
 		header.Set("Content-Type", contentPartArr[0]+"; charset=utf-8")
 	}
 	header.Del("Content-Encoding")
-	resp := site.app.CustomResponsePool.Get().(*CustomResponse)
+	resp := CustomResponsePool.Get().(*CustomResponse)
 	resp.Body = content
 	resp.StatusCode = statusCode
 	resp.Header = header
 	resp.RandomHtml = randomHtml
-	defer site.app.CustomResponsePool.Put(resp)
+	defer CustomResponsePool.Put(resp)
 
 	sum := sha1.Sum([]byte(url))
 	hash := hex.EncodeToString(sum[:])
@@ -589,7 +599,7 @@ func (site *Site) getCache(requestUrl string, force bool) *CustomResponse {
 	}
 
 	if file, err := os.Open(filename); err == nil {
-		resp := site.app.CustomResponsePool.Get().(*CustomResponse)
+		resp := CustomResponsePool.Get().(*CustomResponse)
 		gob.NewDecoder(file).Decode(resp)
 		file.Close()
 		return resp
