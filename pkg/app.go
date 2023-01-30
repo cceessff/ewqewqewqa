@@ -108,8 +108,8 @@ func (app *App) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 		writer.Write([]byte(err.Error()))
 		return
 	}
-	if site.Schema == "" {
-		site.Schema = request.Header.Get("schema")
+	if site.Scheme == "" {
+		site.Scheme = request.Header.Get("scheme")
 	}
 	site.Route(writer, request)
 }

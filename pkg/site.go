@@ -29,7 +29,7 @@ import (
 type Site struct {
 	*SiteConfig
 	*httputil.ReverseProxy
-	Schema    string
+	Scheme    string
 	app       *App
 	CachePath string
 }
@@ -51,7 +51,7 @@ const (
 
 var BufferPool *sync.Pool = &sync.Pool{
 	New: func() any {
-		return bytes.NewBuffer(make([]byte, 512))
+		return bytes.NewBuffer(make([]byte, 0))
 	},
 }
 var CustomResponsePool *sync.Pool = &sync.Pool{
@@ -163,7 +163,7 @@ func (site *Site) ModifyResponse(response *http.Response) error {
 
 		contentType := strings.ToLower(response.Header.Get("Content-Type"))
 		if strings.Contains(contentType, "text/html") {
-			randomHtml := RandHtml(site.Domain, site.Schema)
+			randomHtml := RandHtml(site.Domain, site.Scheme)
 			site.setCache(cacheKey, response.StatusCode, response.Header, content, randomHtml)
 			originUa := response.Request.Context().Value(ORIGIN_UA).(string)
 			isSpider := site.isCrawler(originUa)
@@ -201,7 +201,7 @@ func (site *Site) handleRedirectResponse(response *http.Response, host string) e
 		return err
 	}
 	redirectUrl.Host = host
-	redirectUrl.Scheme = site.Schema
+	redirectUrl.Scheme = site.Scheme
 	response.Header.Set("Location", redirectUrl.String())
 	return nil
 }
@@ -248,9 +248,9 @@ func (site *Site) handleHtmlNode(node *html.Node, requestHost string, isIndexPag
 			*replacedH1 = true
 		}
 		for i, attr := range node.Attr {
-			if attr.Key == "href" || attr.Key == "src" {
-				node.Attr[i].Val = site.replaceHost(attr.Val, requestHost)
-			}
+			// if attr.Key == "href" || attr.Key == "src" {
+			// 	node.Attr[i].Val = site.replaceHost(attr.Val, requestHost)
+			// }
 			if attr.Key == "title" || attr.Key == "alt" || attr.Key == "value" || attr.Key == "placeholder" {
 				for index, find := range site.Finds {
 					tag := fmt.Sprintf("{{replace:%d}}", index)
@@ -317,7 +317,7 @@ func (site *Site) transformText(text string, requestHost string) string {
 		tag := fmt.Sprintf("{{replace:%d}}", index)
 		text = strings.ReplaceAll(text, find, tag)
 	}
-	text = site.replaceHost(text, requestHost)
+	//text = site.replaceHost(text, requestHost)
 	if site.S2t {
 		chineseRegexp, _ := regexp.Compile("^[\u4e00-\u9fa5]+")
 		text = chineseRegexp.ReplaceAllStringFunc(text, func(s string) string {
@@ -357,7 +357,7 @@ func (site *Site) transformANode(node *html.Node, requestHost string) {
 			break
 		}
 		if u.Host == ou.Host {
-			u.Scheme = site.Schema
+			u.Scheme = site.Scheme
 			u.Host = requestHost
 			node.Attr[i].Val = u.String()
 			break
@@ -372,8 +372,9 @@ func (site *Site) transformANode(node *html.Node, requestHost string) {
 		break
 	}
 }
-func (site *Site) parseTemplateTags(content []byte, randomHtml string, isIndexPage bool) []byte {
+func (site *Site) parseTemplateTags(content []byte, requestHost string, randomHtml string, isIndexPage bool) []byte {
 	contentStr := string(content)
+	contentStr = site.replaceHost(contentStr, requestHost)
 	contentStr = strings.Replace(contentStr, "{{index_title}}", site.IndexTitle, 1)
 	contentStr = strings.Replace(contentStr, "{{index_keywords}}", site.IndexKeywords, 1)
 	contentStr = strings.Replace(contentStr, "{{index_description}}", site.IndexDescription, 1)
@@ -405,14 +406,14 @@ func (site *Site) parseTemplateTags(content []byte, randomHtml string, isIndexPa
 	}
 	return []byte(contentStr)
 }
-func (site *Site) handleHtmlResponse(content []byte, isIndexPage bool, isSpider bool, contentType string, reqeustHost string, randomHtml string) []byte {
-	content = site.handleHtmlContent(content, reqeustHost, contentType, isIndexPage)
-	content = site.parseTemplateTags(content, randomHtml, isIndexPage)
+func (site *Site) handleHtmlResponse(content []byte, isIndexPage bool, isSpider bool, contentType string, requestHost string, randomHtml string) []byte {
+	content = GBk2UTF8(content, contentType)
+	content = site.handleHtmlContent(content, requestHost, isIndexPage)
+	content = site.parseTemplateTags(content, requestHost, randomHtml, isIndexPage)
 	return content
 
 }
-func (site *Site) handleHtmlContent(content []byte, requestHost string, contentType string, isIndexPage bool) []byte {
-	content = GBk2UTF8(content, contentType)
+func (site *Site) handleHtmlContent(content []byte, requestHost string, isIndexPage bool) []byte {
 	document, err := html.Parse(bytes.NewReader(content))
 	if err != nil {
 		site.app.Logger.Error("html parse error", err.Error())
@@ -516,11 +517,11 @@ func (site *Site) DecodeUrl(u *url.URL) {
 
 func (site *Site) replaceHost(content string, requestHost string) string {
 	u, _ := url.Parse(site.Url)
-	content = strings.Replace(content, u.Host, requestHost, -1)
-	if site.Schema == "https" {
-		content = strings.Replace(content, "http://"+requestHost, "https://"+requestHost, -1)
+	content = strings.ReplaceAll(content, u.Host, requestHost)
+	if site.Scheme == "https" {
+		content = strings.ReplaceAll(content, "http://"+requestHost, "https://"+requestHost)
 	} else {
-		content = strings.Replace(content, "https://"+requestHost, "http://"+requestHost, -1)
+		content = strings.ReplaceAll(content, "https://"+requestHost, "http://"+requestHost)
 	}
 	hostParts := strings.Split(u.Host, ".")
 	originHost := strings.Join(hostParts[1:], ".")
