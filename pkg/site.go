@@ -20,7 +20,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"golang.org/x/net/html"
@@ -49,16 +48,16 @@ const (
 	REQUEST_HOST
 )
 
-var BufferPool *sync.Pool = &sync.Pool{
-	New: func() any {
-		return bytes.NewBuffer(make([]byte, 0))
-	},
-}
-var CustomResponsePool *sync.Pool = &sync.Pool{
-	New: func() any {
-		return new(CustomResponse)
-	},
-}
+// var BufferPool *sync.Pool = &sync.Pool{
+// 	New: func() any {
+// 		return bytes.NewBuffer(make([]byte, 0))
+// 	},
+// }
+// var CustomResponsePool *sync.Pool = &sync.Pool{
+// 	New: func() any {
+// 		return new(CustomResponse)
+// 	},
+// }
 
 func NewSite(siteConfig *SiteConfig, app *App) error {
 	u, err := url.Parse(siteConfig.Url)
@@ -103,7 +102,7 @@ func (site *Site) Route(writer http.ResponseWriter, request *http.Request) {
 	cacheKey := site.Domain + request.URL.Path + request.URL.RawQuery
 	if site.CacheEnable {
 		if cacheResponse := site.getCache(cacheKey, false); cacheResponse != nil {
-			defer CustomResponsePool.Put(cacheResponse)
+			//defer CustomResponsePool.Put(cacheResponse)
 			contentType := strings.ToLower(cacheResponse.Header.Get("Content-Type"))
 			var content []byte = cacheResponse.Body
 			if strings.Contains(contentType, "text/html") {
@@ -151,16 +150,10 @@ func (site *Site) ModifyResponse(response *http.Response) error {
 
 	cacheKey := site.Domain + response.Request.URL.Path + response.Request.URL.RawQuery
 	if response.StatusCode == 200 {
-		buffer, err := site.readResponse(response)
+		content, err := site.readResponse(response)
 		if err != nil {
 			return err
 		}
-		defer func() {
-			buffer.Reset()
-			BufferPool.Put(buffer)
-		}()
-		content := buffer.Bytes()
-
 		contentType := strings.ToLower(response.Header.Get("Content-Type"))
 		if strings.Contains(contentType, "text/html") {
 			randomHtml := RandHtml(site.Domain, site.Scheme)
@@ -444,23 +437,22 @@ func (site *Site) handleHtmlContent(content []byte, requestHost string, isIndexP
 	return buf.Bytes()
 }
 
-func (site *Site) readResponse(response *http.Response) (*bytes.Buffer, error) {
+func (site *Site) readResponse(response *http.Response) ([]byte, error) {
 	contentEncoding := response.Header.Get("Content-Encoding")
-	buffer := BufferPool.Get().(*bytes.Buffer)
 	if contentEncoding == "gzip" {
 		reader, gzipErr := gzip.NewReader(response.Body)
 		if gzipErr != nil {
 			return nil, gzipErr
 		}
-
-		_, err := buffer.ReadFrom(reader)
+		content, err := ioutil.ReadAll(reader)
 		if err != nil {
 			return nil, err
 		}
-		return buffer, nil
+		return content, nil
 	}
-	_, err := buffer.ReadFrom(response.Body)
-	return buffer, err
+
+	content, err := ioutil.ReadAll(response.Body)
+	return content, err
 
 }
 
@@ -558,13 +550,12 @@ func (site *Site) setCache(url string, statusCode int, header http.Header, conte
 		header.Set("Content-Type", contentPartArr[0]+"; charset=utf-8")
 	}
 	header.Del("Content-Encoding")
-	resp := CustomResponsePool.Get().(*CustomResponse)
-	resp.Body = content
-	resp.StatusCode = statusCode
-	resp.Header = header
-	resp.RandomHtml = randomHtml
-	defer CustomResponsePool.Put(resp)
-
+	resp := &CustomResponse{
+		Body:       content,
+		StatusCode: statusCode,
+		Header:     header,
+		RandomHtml: randomHtml,
+	}
 	sum := sha1.Sum([]byte(url))
 	hash := hex.EncodeToString(sum[:])
 	dir := path.Join(site.CachePath, site.Domain, hash[:5])
@@ -602,7 +593,7 @@ func (site *Site) getCache(requestUrl string, force bool) *CustomResponse {
 	}
 
 	if file, err := os.Open(filename); err == nil {
-		resp := CustomResponsePool.Get().(*CustomResponse)
+		resp := new(CustomResponse)
 		gob.NewDecoder(file).Decode(resp)
 		file.Close()
 		return resp
