@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
@@ -66,6 +67,8 @@ func (admin *AdminModule) Initialize() {
 	admin.adminMux.Handle(prefix+"/delete_cache", admin.AuthMiddleware(admin.DeleteCache))
 	admin.adminMux.Handle(prefix+"/multi_del", admin.AuthMiddleware(admin.multiDel))
 	admin.adminMux.Handle(prefix+"/forbidden_words", admin.AuthMiddleware(admin.forbiddenWords))
+	admin.adminMux.Handle(prefix+"/base_config", admin.AuthMiddleware(admin.baseConfig))
+	admin.adminMux.Handle(prefix+"/save_base_config", admin.AuthMiddleware(admin.saveBaseConfig))
 
 }
 
@@ -551,6 +554,82 @@ func (admin *AdminModule) siteImport(writer http.ResponseWriter, request *http.R
 	}
 	_, _ = writer.Write([]byte("{\"code\":0}"))
 }
+
+func (admin *AdminModule) baseConfig(writer http.ResponseWriter, request *http.Request) {
+
+	t := template.New("config.html")
+	t = template.Must(t.ParseFiles("admin/config.html"))
+	friendLinks := ""
+	for k, v := range admin.app.FriendLinks {
+		line := k + "||" + strings.Join(v, "||") + "\n"
+		friendLinks += line
+	}
+	err := t.Execute(writer, map[string]interface{}{"admin_uri": admin.prefix, "inject_js": admin.app.InjectJs, "keywords": strings.Join(admin.app.Keywords, "\n"), "friend_links": friendLinks})
+	if err != nil {
+		admin.app.Logger.Error("config template error", err.Error())
+	}
+}
+func (admin *AdminModule) saveBaseConfig(writer http.ResponseWriter, request *http.Request) {
+	var params map[string]string
+	err := json.NewDecoder(request.Body).Decode(&params)
+	if err != nil {
+		_, _ = writer.Write([]byte(`{"code":1,"msg":` + err.Error() + `}`))
+		return
+	}
+	action, ok := params["action"]
+
+	if !ok {
+		_, _ = writer.Write([]byte(`{"code":2,"msg":"参数错误"}`))
+		return
+	}
+	content, ok := params["content"]
+	if !ok {
+		_, _ = writer.Write([]byte(`{"code":3,"msg":"参数错误"}`))
+		return
+	}
+
+	if action == "js_config" {
+		err = ioutil.WriteFile("config/inject.js", []byte(content), os.ModePerm)
+		if err != nil {
+			_, _ = writer.Write([]byte(`{"code":4,"msg":` + err.Error() + `}`))
+			return
+		}
+		admin.app.InjectJs = content
+		_, _ = writer.Write([]byte(`{"code":0,"msg":"保存成功"}`))
+		return
+	}
+	if action == "keyword_config" {
+		content = strings.ReplaceAll(content, "\r", "")
+		err = ioutil.WriteFile("config/keywords.txt", []byte(content), os.ModePerm)
+		if err != nil {
+			_, _ = writer.Write([]byte(`{"code":4,"msg":` + err.Error() + `}`))
+			return
+		}
+		admin.app.Keywords = strings.Split(content, "\n")
+		_, _ = writer.Write([]byte(`{"code":0,"msg":"保存成功"}`))
+		return
+	}
+	if action == "friendlink_config" {
+		content = strings.ReplaceAll(content, "\r", "")
+		err = ioutil.WriteFile("config/links.txt", []byte(content), os.ModePerm)
+		if err != nil {
+			_, _ = writer.Write([]byte(`{"code":4,"msg":` + err.Error() + `}`))
+			return
+		}
+		linkLines := strings.Split(content, "\n")
+		for _, line := range linkLines {
+			linkArr := strings.Split(line, "||")
+			if len(linkArr) < 2 {
+				continue
+			}
+			admin.app.FriendLinks[linkArr[0]] = linkArr[1:]
+		}
+		_, _ = writer.Write([]byte(`{"code":0,"msg":"保存成功"}`))
+		return
+	}
+
+}
+
 func (admin *AdminModule) DeleteCache(writer http.ResponseWriter, request *http.Request) {
 	q := request.URL.Query()
 	domain := q.Get("domain")

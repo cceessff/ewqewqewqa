@@ -164,7 +164,7 @@ func readLinks() map[string][]string {
 	if err != nil && len(linkData) <= 0 {
 		return result
 	}
-	linkLines := strings.Split(strings.Replace(string(linkData), "\r", "", -1), "\n")
+	linkLines := strings.Split(strings.ReplaceAll(string(linkData), "\r", ""), "\n")
 	for _, line := range linkLines {
 		linkArr := strings.Split(line, "||")
 		if len(linkArr) < 2 {
