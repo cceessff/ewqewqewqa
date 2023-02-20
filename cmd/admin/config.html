@@ -75,8 +75,6 @@
                                     </div>
                                 </div>
                             </div>
-
-
                         </div>
                     </div>
                 </div>
@@ -96,7 +94,7 @@
                         dataType: "JSON",
                         data: JSON.stringify({ content: content, action: action }),
                         success: function (res) {
-                            if (res.code == 0) {
+                            if (res.code === 0) {
                                 layer.msg("保存成功");
                                 location.reload();
                             } else {
@@ -126,7 +124,6 @@
 
             });
         </script>
-    </div>
     </div>
 </body>
 
