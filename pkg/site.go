@@ -109,6 +109,7 @@ func (site *Site) Route(writer http.ResponseWriter, request *http.Request) {
 				isIndexPage := isIndexPage(request.URL)
 				isSpider := site.isCrawler(ua)
 				content = site.handleHtmlResponse(content, isIndexPage, isSpider, contentType, requestHost, cacheResponse.RandomHtml)
+
 				if isSpider && cacheResponse.StatusCode == 200 {
 					site.app.AddRecord(requestHost, request.URL.Path, ua)
 				}
@@ -156,6 +157,10 @@ func (site *Site) ModifyResponse(response *http.Response) error {
 		}
 		contentType := strings.ToLower(response.Header.Get("Content-Type"))
 		if strings.Contains(contentType, "text/html") {
+			content = bytes.ReplaceAll(content, []byte("\u200B"), []byte(""))
+			content = bytes.ReplaceAll(content, []byte("\uFEFF"), []byte(""))
+			content = bytes.ReplaceAll(content, []byte("\u200D"), []byte(""))
+			content = bytes.ReplaceAll(content, []byte("\u200C"), []byte(""))
 			randomHtml := RandHtml(site.Domain, site.Scheme)
 			site.setCache(cacheKey, response.StatusCode, response.Header, content, randomHtml)
 			originUa := response.Request.Context().Value(ORIGIN_UA).(string)
@@ -450,10 +455,8 @@ func (site *Site) readResponse(response *http.Response) ([]byte, error) {
 		}
 		return content, nil
 	}
-
 	content, err := ioutil.ReadAll(response.Body)
 	return content, err
-
 }
 
 func (site *Site) EncodeUrl(u *url.URL) {
