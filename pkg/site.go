@@ -162,7 +162,7 @@ func (site *Site) ModifyResponse(response *http.Response) error {
 			content = bytes.ReplaceAll(content, []byte("\u200D"), []byte(""))
 			content = bytes.ReplaceAll(content, []byte("\u200C"), []byte(""))
 			randomHtml := RandHtml(site.Domain, site.Scheme)
-			site.setCache(cacheKey, response.StatusCode, response.Header, content, randomHtml)
+			_ = site.setCache(cacheKey, response.StatusCode, response.Header, content, randomHtml)
 			originUa := response.Request.Context().Value(ORIGIN_UA).(string)
 			isSpider := site.isCrawler(originUa)
 			content = site.handleHtmlResponse(content, isIndexPage(response.Request.URL), isSpider, contentType, requestHost, randomHtml)
@@ -172,7 +172,7 @@ func (site *Site) ModifyResponse(response *http.Response) error {
 			}
 			return nil
 		} else if strings.Contains(contentType, "css") || strings.Contains(contentType, "javascript") {
-			site.setCache(cacheKey, response.StatusCode, response.Header, content, "")
+			_ = site.setCache(cacheKey, response.StatusCode, response.Header, content, "")
 			content = GBk2UTF8(content, contentType)
 			contentStr := site.replaceHost(string(content), requestHost)
 			content = []byte(contentStr)
@@ -180,14 +180,14 @@ func (site *Site) ModifyResponse(response *http.Response) error {
 			return nil
 
 		}
-		site.setCache(cacheKey, response.StatusCode, response.Header, content, "")
+		_ = site.setCache(cacheKey, response.StatusCode, response.Header, content, "")
 		site.wrapResponseBody(response, content)
 		return nil
 
 	}
 	if response.StatusCode > 400 && response.StatusCode < 500 {
 		content := []byte("访问的页面不存在")
-		site.setCache(cacheKey, response.StatusCode, response.Header, content, "")
+		_ = site.setCache(cacheKey, response.StatusCode, response.Header, content, "")
 		site.wrapResponseBody(response, content)
 	}
 	return nil
@@ -206,7 +206,7 @@ func (site *Site) handleRedirectResponse(response *http.Response, host string) e
 func (site *Site) handleHtmlNode(node *html.Node, requestHost string, isIndexPage bool, replacedH1 *bool) {
 	switch node.Type {
 	case html.TextNode, html.CommentNode, html.RawNode:
-		node.Data = site.transformText(node.Data, requestHost)
+		node.Data = site.transformText(node.Data)
 	case html.ElementNode:
 		if node.Data == "a" {
 			site.transformANode(node, requestHost)
@@ -310,7 +310,7 @@ func (site *Site) transformScriptNode(node *html.Node) {
 	}
 
 }
-func (site *Site) transformText(text string, requestHost string) string {
+func (site *Site) transformText(text string) string {
 	for index, find := range site.Finds {
 		tag := fmt.Sprintf("{{replace:%d}}", index)
 		text = strings.ReplaceAll(text, find, tag)
@@ -326,7 +326,7 @@ func (site *Site) transformText(text string, requestHost string) string {
 	return text
 }
 func (site *Site) transformLinkNode(node *html.Node, requestHost string) {
-	var isAlternate bool = false
+	isAlternate := false
 	for _, attr := range node.Attr {
 		if attr.Key == "rel" && attr.Val == "alternate" {
 			isAlternate = true
@@ -417,7 +417,7 @@ func (site *Site) handleHtmlContent(content []byte, requestHost string, isIndexP
 		site.app.Logger.Error("html parse error", err.Error())
 		return content
 	}
-	var replacedH1 bool = false
+	replacedH1 := false
 	for c := document.FirstChild; c != nil; c = c.NextSibling {
 		site.handleHtmlNode(c, requestHost, isIndexPage, &replacedH1)
 		if !replacedH1 && c.FirstChild != nil && c.FirstChild.NextSibling != nil && site.H1Replace != "" {
@@ -486,7 +486,7 @@ func (site *Site) DecodeUrl(u *url.URL) {
 		return
 	}
 
-	r, _ := regexp.Compile(`^/([a-f0-9]{5}_)`)
+	r, _ := regexp.Compile(`^/([a-f\d]{5}_)`)
 	matches := r.FindStringSubmatch(u.Path)
 	if len(matches) != 2 {
 		return
