@@ -251,7 +251,7 @@ func (site *Site) handleHtmlNode(node *html.Node, requestHost string, isIndexPag
 			// if attr.Key == "href" || attr.Key == "src" {
 			// 	node.Attr[i].Val = site.replaceHost(attr.Val, requestHost)
 			// }
-			if attr.Key == "title" || attr.Key == "alt" || attr.Key == "value" || attr.Key == "placeholder" {
+			if strings.EqualFold(attr.Key, "title") || strings.EqualFold(attr.Key, "alt") || strings.EqualFold(attr.Key, "value") || strings.EqualFold(attr.Key, "placeholder") {
 				for index, find := range site.Finds {
 					tag := fmt.Sprintf("{{replace:%d}}", index)
 					attr.Val = strings.ReplaceAll(attr.Val, find, tag)
@@ -271,19 +271,19 @@ func (site *Site) handleHtmlNode(node *html.Node, requestHost string, isIndexPag
 func (site *Site) transformMetaNode(node *html.Node, isIndexPage bool) {
 	content := ""
 	for i, attr := range node.Attr {
-		if attr.Key == "name" && attr.Val == "keywords" && isIndexPage {
+		if strings.EqualFold(attr.Key, "name") && strings.EqualFold(attr.Val, "keywords") && isIndexPage {
 			content = "{{index_keywords}}"
 			break
 		}
-		if attr.Key == "name" && attr.Val == "description" && isIndexPage {
+		if strings.EqualFold(attr.Key, "name") && strings.EqualFold(attr.Val, "description") && isIndexPage {
 			content = "{{index_description}}"
 			break
 		}
-		if strings.ToLower(attr.Key) == "http-equiv" && strings.ToLower(attr.Val) == "content-type" {
+		if strings.EqualFold(attr.Key, "http-equiv") && strings.EqualFold(attr.Val, "content-type") {
 			content = "text/html; charset=UTF-8"
 			break
 		}
-		if attr.Key == "charset" {
+		if strings.EqualFold(attr.Key, "charset") {
 			node.Attr[i].Val = "UTF-8"
 		}
 	}
@@ -291,7 +291,7 @@ func (site *Site) transformMetaNode(node *html.Node, isIndexPage bool) {
 		return
 	}
 	for i, attr := range node.Attr {
-		if attr.Key == "content" {
+		if strings.EqualFold(attr.Key, "content") {
 			node.Attr[i].Val = content
 		}
 	}
@@ -305,7 +305,7 @@ func (site *Site) transformScriptNode(node *html.Node) {
 		node.FirstChild.Data = ""
 	}
 	for i, attr := range node.Attr {
-		if attr.Key == "src" {
+		if strings.EqualFold(attr.Key, "src") {
 			node.Attr[i].Val = ""
 			break
 		}
@@ -330,7 +330,7 @@ func (site *Site) transformText(text string) string {
 func (site *Site) transformLinkNode(node *html.Node, requestHost string) {
 	isAlternate := false
 	for _, attr := range node.Attr {
-		if attr.Key == "rel" && attr.Val == "alternate" {
+		if strings.EqualFold(attr.Key, "rel") && strings.EqualFold(attr.Val, "alternate") {
 			isAlternate = true
 			break
 		}
@@ -339,7 +339,7 @@ func (site *Site) transformLinkNode(node *html.Node, requestHost string) {
 		return
 	}
 	for i, attr := range node.Attr {
-		if attr.Key == "href" {
+		if strings.EqualFold(attr.Key, "href") {
 			node.Attr[i].Val = "//" + requestHost
 			break
 		}
@@ -348,7 +348,7 @@ func (site *Site) transformLinkNode(node *html.Node, requestHost string) {
 func (site *Site) transformANode(node *html.Node, requestHost string) {
 	ou, _ := url.Parse(site.Url)
 	for i, attr := range node.Attr {
-		if attr.Key != "href" || attr.Val == "" {
+		if !strings.EqualFold(attr.Key, "href") || attr.Val == "" {
 			continue
 		}
 
