@@ -198,8 +198,10 @@ func (site *Site) handleRedirectResponse(response *http.Response, host string) e
 	if err != nil {
 		return err
 	}
-	redirectUrl.Host = host
-	redirectUrl.Scheme = site.Scheme
+	if redirectUrl.Host == response.Request.URL.Host {
+		redirectUrl.Host = host
+		redirectUrl.Scheme = site.Scheme
+	}
 	response.Header.Set("Location", redirectUrl.String())
 	return nil
 }

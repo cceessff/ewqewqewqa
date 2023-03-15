@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/360EntSecGroup-Skylar/excelize"
+	"github.com/xuri/excelize/v2"
 )
 
 type AdminModule struct {
@@ -497,13 +497,18 @@ func (admin *AdminModule) siteImport(writer http.ResponseWriter, request *http.R
 		_, _ = writer.Write([]byte(`{"code":1,"msg":` + err.Error() + `}`))
 		return
 	}
+	defer mf.Close()
 
 	f, err := excelize.OpenReader(mf)
 	if err != nil {
-		_, _ = writer.Write([]byte(`{"code":1,"msg":` + err.Error() + `}`))
+		_, _ = writer.Write([]byte(`{"code":2,"msg":` + err.Error() + `}`))
 		return
 	}
-	rows := f.GetRows("Sheet1")
+	rows, err := f.GetRows("Sheet1")
+	if err != nil {
+		_, _ = writer.Write([]byte(`{"code":2,"msg":` + err.Error() + `}`))
+		return
+	}
 	var configs = make([]*SiteConfig, 0)
 	for k, row := range rows {
 		if k == 0 {
@@ -521,7 +526,7 @@ func (admin *AdminModule) siteImport(writer http.ResponseWriter, request *http.R
 		if err != nil || cacheTime == 0 {
 			cacheTime = 1440
 		}
-		var siteConfig SiteConfig = SiteConfig{
+		var siteConfig = &SiteConfig{
 			Domain:           row[0],
 			Url:              row[1],
 			IndexTitle:       row[2],
@@ -538,7 +543,7 @@ func (admin *AdminModule) siteImport(writer http.ResponseWriter, request *http.R
 			BaiduPushKey:     row[12],
 			SmPushKey:        row[13],
 		}
-		configs = append(configs, &siteConfig)
+		configs = append(configs, siteConfig)
 	}
 	err = admin.dao.AddMulti(configs)
 	if err != nil {
