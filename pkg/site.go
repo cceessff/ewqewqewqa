@@ -283,6 +283,10 @@ func (site *Site) transformMetaNode(node *html.Node, isIndexPage bool) {
 			content = "text/html; charset=UTF-8"
 			break
 		}
+		if strings.EqualFold(attr.Key, "http-equiv") && strings.EqualFold(attr.Val, "Content-Security-Policy") {
+			content = "*"
+			break
+		}
 		if strings.EqualFold(attr.Key, "charset") {
 			node.Attr[i].Val = "UTF-8"
 		}
@@ -554,6 +558,7 @@ func (site *Site) setCache(url string, statusCode int, header http.Header, conte
 		header.Set("Content-Type", contentPartArr[0]+"; charset=utf-8")
 	}
 	header.Del("Content-Encoding")
+	header.Del("Content-Security-Policy")
 	resp := &CustomResponse{
 		Body:       content,
 		StatusCode: statusCode,
