@@ -148,7 +148,6 @@ func (site *Site) ModifyResponse(response *http.Response) error {
 	if response.StatusCode == 301 || response.StatusCode == 302 {
 		return site.handleRedirectResponse(response, requestHost)
 	}
-
 	cacheKey := site.Domain + response.Request.URL.Path + response.Request.URL.RawQuery
 	if response.StatusCode == 200 {
 		content, err := site.readResponse(response)

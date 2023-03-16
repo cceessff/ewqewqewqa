@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/wenzhenxi/gorsa"
 	"golang.org/x/net/html/charset"
@@ -55,9 +56,11 @@ func isIndexPage(u *url.URL) bool {
 
 }
 func GBk2UTF8(content []byte, contentType string) []byte {
-	e, name, _ := charset.DetermineEncoding(content, contentType)
-	if strings.ToLower(name) != "utf-8" {
-		content, _ = e.NewDecoder().Bytes(content)
+	if !IsUTF8(content[:1024]) {
+		e, name, _ := charset.DetermineEncoding(content, contentType)
+		if !strings.EqualFold(name, "utf-8") {
+			content, _ = e.NewDecoder().Bytes(content)
+		}
 	}
 	return content
 }
@@ -292,4 +295,27 @@ func Escape(content string) string {
 	content = strings.ReplaceAll(content, "\"", "&#34;")
 	content = strings.ReplaceAll(content, "\r", "&#13;")
 	return content
+}
+func IsUTF8(content []byte) bool {
+	for i := len(content) - 1; i >= 0 && i > len(content)-4; i-- {
+		b := content[i]
+		if b < 0x80 {
+			break
+		}
+		if utf8.RuneStart(b) {
+			content = content[:i]
+			break
+		}
+	}
+	hasHighBit := false
+	for _, c := range content {
+		if c >= 0x80 {
+			hasHighBit = true
+			break
+		}
+	}
+	if hasHighBit && utf8.Valid(content) {
+		return true
+	}
+	return false
 }
