@@ -161,6 +161,7 @@ func (site *Site) ModifyResponse(response *http.Response) error {
 			content = bytes.ReplaceAll(content, []byte("\uFEFF"), []byte(""))
 			content = bytes.ReplaceAll(content, []byte("\u200D"), []byte(""))
 			content = bytes.ReplaceAll(content, []byte("\u200C"), []byte(""))
+			content = GBk2UTF8(content, contentType)
 			randomHtml := RandHtml(site.Domain, site.Scheme)
 			_ = site.setCache(cacheKey, response.StatusCode, response.Header, content, randomHtml)
 			originUa := response.Request.Context().Value(ORIGIN_UA).(string)
@@ -407,7 +408,6 @@ func (site *Site) parseTemplateTags(content []byte, requestHost string, randomHt
 	return []byte(contentStr)
 }
 func (site *Site) handleHtmlResponse(content []byte, isIndexPage bool, isSpider bool, contentType string, requestHost string, randomHtml string) []byte {
-	content = GBk2UTF8(content, contentType)
 	content = site.handleHtmlContent(content, requestHost, isIndexPage)
 	content = site.parseTemplateTags(content, requestHost, randomHtml, isIndexPage)
 	return content
