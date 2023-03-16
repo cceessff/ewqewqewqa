@@ -56,7 +56,11 @@ func isIndexPage(u *url.URL) bool {
 
 }
 func GBk2UTF8(content []byte, contentType string) []byte {
-	if !IsUTF8(content[:1024]) {
+	temp := content
+	if len(content) > 1024 {
+		temp = content[:1024]
+	}
+	if !IsUTF8(temp) {
 		e, name, _ := charset.DetermineEncoding(content, contentType)
 		if !strings.EqualFold(name, "utf-8") {
 			content, _ = e.NewDecoder().Bytes(content)
