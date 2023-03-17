@@ -76,8 +76,8 @@ func main() {
 
 func startCmd() {
 	rand.Seed(time.Now().UnixNano())
-	handler := handler.MustRotateFile("mirror.log", rotatefile.EveryDay, func(c *handler.Config) {
-		c.BackupNum = 7
+	handler := handler.MustRotateFile("logs/mirror.log", rotatefile.EveryDay, func(c *handler.Config) {
+		c.BackupNum = 2
 		c.Levels = slog.AllLevels
 		c.UseJSON = true
 	})

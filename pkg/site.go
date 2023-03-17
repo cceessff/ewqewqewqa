@@ -187,6 +187,7 @@ func (site *Site) ModifyResponse(response *http.Response) error {
 	}
 	if response.StatusCode > 400 && response.StatusCode < 500 {
 		content := []byte("访问的页面不存在")
+		response.Header.Set("Content-Type", "text/plain")
 		_ = site.setCache(cacheKey, response.StatusCode, response.Header, content, "")
 		site.wrapResponseBody(response, content)
 	}
@@ -523,11 +524,14 @@ func (site *Site) replaceHost(content string, requestHost string) string {
 	} else {
 		content = strings.ReplaceAll(content, "https://"+requestHost, "http://"+requestHost)
 	}
+	originHost := u.Host
 	hostParts := strings.Split(u.Host, ".")
-	originHost := strings.Join(hostParts[1:], ".")
+	if len(hostParts) >= 3 {
+		originHost = strings.Join(hostParts[1:], ".")
+	}
 	subDomainRegexp, _ := regexp.Compile(`[a-zA-Z0-9]+\.` + originHost)
 	content = subDomainRegexp.ReplaceAllString(content, "")
-	content = strings.Replace(content, originHost, site.Domain, -1)
+	content = strings.ReplaceAll(content, originHost, site.Domain)
 	return content
 }
 func (site *Site) transformTitleNode(node *html.Node, isIndexPage bool) {
