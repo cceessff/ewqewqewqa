@@ -571,7 +571,7 @@ func (site *Site) setCache(url string, statusCode int, header http.Header, conte
 	}
 	sum := sha1.Sum([]byte(url))
 	hash := hex.EncodeToString(sum[:])
-	dir := path.Join(site.CachePath, site.Domain, hash[:5])
+	dir := path.Join(site.CachePath, site.Domain, hash[:2])
 	if !isExist(dir) {
 		err := os.MkdirAll(dir, os.ModePerm)
 		if err != nil {
@@ -595,7 +595,7 @@ func (site *Site) setCache(url string, statusCode int, header http.Header, conte
 func (site *Site) getCache(requestUrl string, force bool) *CustomResponse {
 	sum := sha1.Sum([]byte(requestUrl))
 	hash := hex.EncodeToString(sum[:])
-	dir := path.Join(site.CachePath, site.Domain, hash[:5])
+	dir := path.Join(site.CachePath, site.Domain, hash[:2])
 	filename := path.Join(dir, hash)
 	fileInfo, err := os.Stat(filename)
 	if err != nil {
