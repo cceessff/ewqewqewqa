@@ -28,6 +28,7 @@ type AppConfig struct {
 	Keywords      []string
 	InjectJs      string
 	FriendLinks   map[string][]string
+	AdDomains     map[string]bool
 }
 type App struct {
 	*AppConfig

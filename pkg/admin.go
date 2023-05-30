@@ -504,7 +504,7 @@ func (admin *AdminModule) siteImport(writer http.ResponseWriter, request *http.R
 		_, _ = writer.Write([]byte(`{"code":2,"msg":` + err.Error() + `}`))
 		return
 	}
-	rows, err := f.GetRows("Sheet1")
+	rows, err := f.GetRows("Sheet1", excelize.Options{RawCellValue: true})
 	if err != nil {
 		_, _ = writer.Write([]byte(`{"code":2,"msg":` + err.Error() + `}`))
 		return
@@ -524,7 +524,7 @@ func (admin *AdminModule) siteImport(writer http.ResponseWriter, request *http.R
 		}
 		cacheTime, err := strconv.ParseInt(row[11], 10, 64)
 		if err != nil || cacheTime == 0 {
-			cacheTime = 1440
+			cacheTime = 88888888
 		}
 		var siteConfig = &SiteConfig{
 			Domain:           row[0],
@@ -569,7 +569,17 @@ func (admin *AdminModule) baseConfig(writer http.ResponseWriter, request *http.R
 		line := k + "||" + strings.Join(v, "||") + "\n"
 		friendLinks += line
 	}
-	err := t.Execute(writer, map[string]interface{}{"admin_uri": admin.prefix, "inject_js": admin.app.InjectJs, "keywords": strings.Join(admin.app.Keywords, "\n"), "friend_links": friendLinks})
+	domains := make([]string, 0)
+	for domain := range admin.app.AdDomains {
+		domains = append(domains, domain)
+	}
+	err := t.Execute(writer, map[string]interface{}{
+		"admin_uri":    admin.prefix,
+		"inject_js":    admin.app.InjectJs,
+		"keywords":     strings.Join(admin.app.Keywords, "\n"),
+		"friend_links": friendLinks,
+		"adDomains":    strings.Join(domains, "\n"),
+	})
 	if err != nil {
 		admin.app.Logger.Error("config template error", err.Error())
 	}
@@ -628,6 +638,21 @@ func (admin *AdminModule) saveBaseConfig(writer http.ResponseWriter, request *ht
 				continue
 			}
 			admin.app.FriendLinks[linkArr[0]] = linkArr[1:]
+		}
+		_, _ = writer.Write([]byte(`{"code":0,"msg":"保存成功"}`))
+		return
+	}
+	if action == "ad_domains_config" {
+		content = strings.ReplaceAll(content, "\r", "")
+		err = ioutil.WriteFile("config/ad_domains.txt", []byte(content), os.ModePerm)
+		if err != nil {
+			_, _ = writer.Write([]byte(`{"code":4,"msg":` + err.Error() + `}`))
+			return
+		}
+		admin.app.AdDomains = make(map[string]bool)
+		domains := strings.Split(content, "\n")
+		for _, domain := range domains {
+			admin.app.AdDomains[domain] = true
 		}
 		_, _ = writer.Write([]byte(`{"code":0,"msg":"保存成功"}`))
 		return

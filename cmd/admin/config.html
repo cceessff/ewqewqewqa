@@ -29,6 +29,7 @@
                                     <li class="layui-this">JS代码</li>
                                     <li>标题关键词</li>
                                     <li>友情链接</li>
+                                    <li>开启广告域名</li>
                                 </ul>
                                 <div class="layui-tab-content">
                                     <div class="layui-tab-item layui-show">
@@ -70,6 +71,21 @@
                                         <div class="layui-form-item">
                                             <div class="layui-input-block">
                                                 <button type="button" class="layui-btn" id="save_friendlink">立即提交</button>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="layui-tab-item">
+                                        <div class="layui-form-item layui-form-text">
+                                            <label class="layui-form-label">开启广告域名</label>
+                                            <div class="layui-input-block">
+                                                <textarea id="ad_domains_config_textarea" placeholder="请输入内容" rows="15"
+                                                    class="layui-textarea">{{.adDomains}}</textarea>
+                                            </div>
+                                        </div>
+                                        <div class="layui-form-item">
+                                            <div class="layui-input-block">
+                                                <button type="button" class="layui-btn" id="save_ad_domains">立即提交</button>
                                             </div>
                                         </div>
                                     </div>
@@ -119,6 +135,10 @@
                 $("#save_friendlink").on("click", function () {
                     let friendlink_config = document.querySelector("#friendlinks_config_textarea").value;
                     request(friendlink_config, "friendlink_config");
+                });
+                $("#save_ad_domains").on("click", function () {
+                    let ad_domains_config = document.querySelector("#ad_domains_config_textarea").value;
+                    request(ad_domains_config, "ad_domains_config");
                 });
 
 

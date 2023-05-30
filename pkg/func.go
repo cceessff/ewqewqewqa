@@ -205,8 +205,22 @@ func ParseAppConfig() (AppConfig, error) {
 	}
 	//友情链接文本
 	appConfig.FriendLinks = readLinks()
+	appConfig.AdDomains = adDomains()
 
 	return appConfig, nil
+}
+func adDomains() map[string]bool {
+	adDomainData, err := ioutil.ReadFile("config/ad_domains.txt")
+	adDomains := make(map[string]bool)
+	if err != nil || len(adDomainData) == 0 {
+		return adDomains
+
+	}
+	domains := strings.Split(strings.ReplaceAll(string(adDomainData), "\r", ""), "\n")
+	for _, domain := range domains {
+		adDomains[domain] = true
+	}
+	return adDomains
 }
 
 func GetExpireDate() (string, error) {
