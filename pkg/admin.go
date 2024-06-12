@@ -11,14 +11,13 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/xuri/excelize/v2"
 )
 
 type AdminModule struct {
 	dao      *Dao
-	app      *App
+	app      *Application
 	adminMux *http.ServeMux
 	UserName string
 	Password string
@@ -29,7 +28,7 @@ type AdminUser struct {
 	Password string `json:"password"`
 }
 
-func NewAdmin(app *App) *AdminModule {
+func NewAdmin(app *Application) *AdminModule {
 	userName, password, err := makeAdminUser()
 	if err != nil {
 		app.Logger.Fatal("make admin user error", err.Error())
@@ -55,8 +54,7 @@ func (admin *AdminModule) Initialize() {
 	admin.adminMux.Handle(prefix, admin.AuthMiddleware(admin.index))
 	admin.adminMux.Handle(prefix+"/site", admin.AuthMiddleware(admin.site))
 	admin.adminMux.Handle(prefix+"/record", admin.AuthMiddleware(admin.record))
-	admin.adminMux.Handle(prefix+"/recordList", admin.AuthMiddleware(admin.recordList))
-	admin.adminMux.Handle(prefix+"/del_record", admin.AuthMiddleware(admin.delRecord))
+
 	admin.adminMux.Handle(prefix+"/list", admin.AuthMiddleware(admin.siteList))
 	admin.adminMux.Handle(prefix+"/edit", admin.AuthMiddleware(admin.editSite))
 
@@ -173,98 +171,6 @@ func (admin *AdminModule) record(w http.ResponseWriter, request *http.Request) {
 	if err != nil {
 		admin.app.Logger.Error("index template error", err.Error())
 	}
-}
-
-func (admin *AdminModule) recordList(writer http.ResponseWriter, request *http.Request) {
-
-	params := request.URL.Query()
-	var result = make(map[string]interface{})
-	domain := params.Get("domain")
-	var page int = 1
-	var limit int = 50
-	var startTime int64 = 0
-	var endTime int64 = 0
-	if pageParam := params.Get("page"); pageParam != "" {
-		page, _ = strconv.Atoi(pageParam)
-	}
-	if limitParam := params.Get("limit"); limitParam != "" {
-		limit, _ = strconv.Atoi(limitParam)
-	}
-	if startTimeParam := params.Get("start_time"); startTimeParam != "" {
-		timeResult, err := time.ParseInLocation("2006-01-02 15:04:05", startTimeParam, time.Local)
-		if err == nil {
-			startTime = timeResult.Unix()
-		}
-	}
-	if endTimeParam := params.Get("end_time"); endTimeParam != "" {
-		timeResult, err := time.ParseInLocation("2006-01-02 15:04:05", endTimeParam, time.Local)
-		if err == nil {
-			endTime = timeResult.Unix()
-		}
-	}
-
-	records, err := admin.dao.recordList(domain, startTime, endTime, page, limit)
-	if err != nil {
-		result["code"] = 2
-		result["msg"] = err.Error()
-		data, _ := json.Marshal(result)
-		_, _ = writer.Write(data)
-		return
-	}
-	count, err := admin.dao.recordCount(domain, startTime, endTime)
-	if err != nil {
-		result["code"] = 3
-		result["msg"] = err.Error()
-		data, _ := json.Marshal(result)
-		_, _ = writer.Write(data)
-		return
-	}
-	result["code"] = 0
-	result["msg"] = ""
-	result["count"] = count
-	result["data"] = records
-	data, _ := json.Marshal(result)
-	_, _ = writer.Write(data)
-
-}
-
-func (admin *AdminModule) delRecord(writer http.ResponseWriter, request *http.Request) {
-	params := request.URL.Query()
-	var result = make(map[string]interface{})
-	var startTime int64 = 0
-	var endTime int64 = 0
-	if startTimeParam := params.Get("start_time"); startTimeParam != "" {
-		timeResult, err := time.ParseInLocation("2006-01-02 15:04:05", startTimeParam, time.Local)
-		if err == nil {
-			startTime = timeResult.Unix()
-		}
-	}
-	if endTimeParam := params.Get("end_time"); endTimeParam != "" {
-		timeResult, err := time.ParseInLocation("2006-01-02 15:04:05", endTimeParam, time.Local)
-		if err == nil {
-			endTime = timeResult.Unix()
-		}
-	}
-	if startTime == 0 || endTime == 0 {
-		result["code"] = 2
-		result["msg"] = "请输入开始时间和结束时间"
-		data, _ := json.Marshal(result)
-		_, _ = writer.Write(data)
-		return
-	}
-	err := admin.dao.DelRecord(startTime, endTime)
-	if err != nil {
-		result["code"] = 3
-		result["msg"] = err.Error()
-		data, _ := json.Marshal(result)
-		_, _ = writer.Write(data)
-		return
-	}
-	result["code"] = 0
-	result["msg"] = "删除成功"
-	data, _ := json.Marshal(result)
-	_, _ = writer.Write(data)
-
 }
 
 func (admin *AdminModule) forbiddenWords(writer http.ResponseWriter, request *http.Request) {
@@ -604,7 +510,7 @@ func (admin *AdminModule) saveBaseConfig(writer http.ResponseWriter, request *ht
 	}
 
 	if action == "js_config" {
-		err = ioutil.WriteFile("config/inject.js", []byte(content), os.ModePerm)
+		err = os.WriteFile("config/inject.js", []byte(content), os.ModePerm)
 		if err != nil {
 			_, _ = writer.Write([]byte(`{"code":4,"msg":` + err.Error() + `}`))
 			return
@@ -626,7 +532,7 @@ func (admin *AdminModule) saveBaseConfig(writer http.ResponseWriter, request *ht
 	}
 	if action == "friendlink_config" {
 		content = strings.ReplaceAll(content, "\r", "")
-		err = ioutil.WriteFile("config/links.txt", []byte(content), os.ModePerm)
+		err = os.WriteFile("config/links.txt", []byte(content), os.ModePerm)
 		if err != nil {
 			_, _ = writer.Write([]byte(`{"code":4,"msg":` + err.Error() + `}`))
 			return
@@ -644,7 +550,7 @@ func (admin *AdminModule) saveBaseConfig(writer http.ResponseWriter, request *ht
 	}
 	if action == "ad_domains_config" {
 		content = strings.ReplaceAll(content, "\r", "")
-		err = ioutil.WriteFile("config/ad_domains.txt", []byte(content), os.ModePerm)
+		err = os.WriteFile("config/ad_domains.txt", []byte(content), os.ModePerm)
 		if err != nil {
 			_, _ = writer.Write([]byte(`{"code":4,"msg":` + err.Error() + `}`))
 			return

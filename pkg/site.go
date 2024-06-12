@@ -9,6 +9,7 @@ import (
 	"encoding/gob"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"math/rand"
 	"net/http"
@@ -29,7 +30,7 @@ type Site struct {
 	*SiteConfig
 	*httputil.ReverseProxy
 	Scheme    string
-	app       *App
+	app       *Application
 	CachePath string
 }
 type CustomResponse struct {
@@ -48,18 +49,7 @@ const (
 	REQUEST_HOST
 )
 
-// var BufferPool *sync.Pool = &sync.Pool{
-// 	New: func() any {
-// 		return bytes.NewBuffer(make([]byte, 0))
-// 	},
-// }
-// var CustomResponsePool *sync.Pool = &sync.Pool{
-// 	New: func() any {
-// 		return new(CustomResponse)
-// 	},
-// }
-
-func NewSite(siteConfig *SiteConfig, app *App) error {
+func NewSite(siteConfig *SiteConfig, app *Application) error {
 	u, err := url.Parse(siteConfig.Url)
 	if err != nil {
 		return err
@@ -84,9 +74,7 @@ func NewSite(siteConfig *SiteConfig, app *App) error {
 	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
 		site.ErrorHandler(w, r, err)
 	}
-	// proxy.Rewrite = func(pr *httputil.ProxyRequest) {
-	// 	pr.Out.Header.Del("Scheme")
-	// }
+
 	app.Sites.Store(siteConfig.Domain, site)
 	return nil
 }
@@ -112,10 +100,6 @@ func (site *Site) Route(writer http.ResponseWriter, request *http.Request) {
 				isSpider := site.isCrawler(ua)
 				requestPath := request.URL.Path
 				content = site.handleHtmlResponse(content, isIndexPage, isSpider, contentType, requestHost, requestPath, cacheResponse.RandomHtml)
-
-				if isSpider && cacheResponse.StatusCode == 200 {
-					site.app.AddRecord(requestHost, request.URL.Path, ua)
-				}
 			} else if strings.Contains(contentType, "css") || strings.Contains(contentType, "javascript") {
 				content = GBk2UTF8(content, contentType)
 				for index, find := range site.Finds {
@@ -175,9 +159,6 @@ func (site *Site) ModifyResponse(response *http.Response) error {
 			requestPath := response.Request.URL.Path
 			content = site.handleHtmlResponse(content, isIndexPage(response.Request.URL), isSpider, contentType, requestHost, requestPath, randomHtml)
 			site.wrapResponseBody(response, content)
-			if isSpider {
-				site.app.AddRecord(requestHost, response.Request.URL.Path, originUa)
-			}
 			return nil
 		} else if strings.Contains(contentType, "css") || strings.Contains(contentType, "javascript") {
 			_ = site.setCache(cacheKey, response.StatusCode, response.Header, content, "")
@@ -386,7 +367,8 @@ func (site *Site) transformANode(node *html.Node, requestHost string, requestPat
 		}
 		if u.Path == "" {
 			//path为空，是友情链接，全部删除
-			node = nil
+			//node.Attr[i].Val = "#"
+			node.Attr[i].Val = "#"
 			break
 		}
 		//不是友情链接，只删除链接，不删除文字
@@ -478,7 +460,7 @@ func (site *Site) readResponse(response *http.Response) ([]byte, error) {
 		}
 		return content, nil
 	}
-	content, err := ioutil.ReadAll(response.Body)
+	content, err := io.ReadAll(response.Body)
 	return content, err
 }
 
@@ -639,7 +621,7 @@ func isExist(path string) bool {
 	return true
 
 }
-func (site Site) friendLink(domain string) string {
+func (site *Site) friendLink(domain string) string {
 	if len(site.app.FriendLinks[domain]) <= 0 {
 		return ""
 	}
@@ -675,7 +657,7 @@ func (site *Site) isGoodCrawler(ua string) bool {
 	return false
 }
 func (site *Site) wrapResponseBody(response *http.Response, content []byte) {
-	readAndCloser := ioutil.NopCloser(bytes.NewReader(content))
+	readAndCloser := io.NopCloser(bytes.NewReader(content))
 	contentLength := int64(len(content))
 	response.Body = readAndCloser
 	response.ContentLength = contentLength
@@ -693,7 +675,6 @@ func (site *Site) ErrorHandler(writer http.ResponseWriter, request *http.Request
 		return
 
 	}
-
 	var content = cacheResponse.Body
 	contentType := strings.ToLower(cacheResponse.Header.Get("Content-Type"))
 	if strings.Contains(contentType, "text/html") {
@@ -701,9 +682,6 @@ func (site *Site) ErrorHandler(writer http.ResponseWriter, request *http.Request
 		isSpider := site.isCrawler(ua)
 		requestPath := request.URL.Path
 		content = site.handleHtmlResponse(content, isIndexPage, isSpider, contentType, requestHost, requestPath, cacheResponse.RandomHtml)
-		if isSpider && cacheResponse.StatusCode == 200 {
-			site.app.AddRecord(requestHost, request.URL.Path, ua)
-		}
 	} else if strings.Contains(contentType, "css") || strings.Contains(contentType, "javascript") {
 		content = GBk2UTF8(content, contentType)
 		contentStr := site.replaceHost(string(content), requestHost)

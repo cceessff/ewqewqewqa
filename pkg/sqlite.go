@@ -262,7 +262,7 @@ func InitTable() error {
 	if err != nil {
 		return err
 	}
-	return createRecordTable(db)
+	return nil
 }
 
 func createSiteTable(db *sql.DB) error {

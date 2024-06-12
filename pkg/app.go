@@ -30,7 +30,7 @@ type AppConfig struct {
 	FriendLinks   map[string][]string
 	AdDomains     map[string]bool
 }
-type App struct {
+type Application struct {
 	*AppConfig
 	Dao *Dao
 	*http.Server
@@ -40,11 +40,32 @@ type App struct {
 	IpList      []net.IP
 	ExpireDate  string
 	Logger      *slog.Logger
-	RecordChann chan *Record
-	Finish      chan int
 }
 
-func (app *App) Start() {
+func (app *Application) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
+
+	if authErr := app.Auth(); authErr != nil {
+		_, _ = writer.Write([]byte(authErr.Error()))
+		return
+	}
+	if request.URL.Path == app.InjectJsPath {
+		writer.Header().Set("Content-Type", "text/javascript;charset=utf-8")
+		writer.Write([]byte(app.InjectJs))
+		return
+	}
+	host := GetHost(request)
+	site, err := app.querySite(host)
+	if err != nil {
+		writer.Write([]byte(err.Error()))
+		return
+	}
+	if site.Scheme == "" {
+		site.Scheme = request.Header.Get("scheme")
+	}
+	site.Route(writer, request)
+}
+
+func (app *Application) Start() {
 	l, err := net.Listen("tcp", ":"+app.Port)
 	if err != nil {
 		app.Logger.Fatalln("net listen", err.Error())
@@ -67,19 +88,8 @@ func (app *App) Start() {
 		}
 	}()
 
-	go func() {
-		for record := range app.RecordChann {
-			err := app.Dao.AddRecord(record)
-			if err != nil {
-				app.Logger.Error(err.Error())
-			}
-		}
-		app.Finish <- 1
-
-	}()
-
 }
-func (app *App) Stop() {
+func (app *Application) Stop() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	err := app.Shutdown(ctx)
 	if err != nil {
@@ -89,44 +99,22 @@ func (app *App) Stop() {
 	if err != nil {
 		app.Logger.Error("shutdown error" + err.Error())
 	}
-	close(app.RecordChann)
 	defer cancel()
 }
-func (app *App) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 
-	if authErr := app.Auth(); authErr != nil {
-		_, _ = writer.Write([]byte(authErr.Error()))
-		return
-	}
-	if request.URL.Path == app.InjectJsPath {
-		writer.Header().Set("Content-Type", "text/javascript;charset=utf-8")
-		writer.Write([]byte(app.InjectJs))
-		return
-	}
-	host := GetHost(request)
-	site, err := app.querySite(host)
-	if err != nil {
-		writer.Write([]byte(err.Error()))
-		return
-	}
-	if site.Scheme == "" {
-		site.Scheme = request.Header.Get("scheme")
-	}
-	site.Route(writer, request)
-}
-func (app *App) Auth() error {
+func (app *Application) Auth() error {
 	if expire, err := time.Parse("2006-01-02", app.ExpireDate); err != nil || expire.Unix() < time.Now().Unix() {
 		return errors.New("已到期，请重新续期")
 	}
 	return nil
 }
 
-func (app *App) MakeSite(siteConfig *SiteConfig) error {
+func (app *Application) MakeSite(siteConfig *SiteConfig) error {
 	return NewSite(siteConfig, app)
 
 }
 
-func (app *App) querySite(host string) (*Site, error) {
+func (app *Application) querySite(host string) (*Site, error) {
 	hostParts := strings.Split(host, ".")
 	if len(hostParts) == 1 {
 		return nil, errors.New("站点不存在，请检查配置")
@@ -136,25 +124,4 @@ func (app *App) querySite(host string) (*Site, error) {
 		return item.(*Site), nil
 	}
 	return app.querySite(strings.Join(hostParts[1:], "."))
-}
-func (app *App) AddRecord(domain, path, userAgent string) {
-
-	record := &Record{
-		Domain:      domain,
-		Path:        path,
-		UserAgent:   userAgent,
-		Spider:      app.getSpiderName(userAgent),
-		CreatedTime: time.Now().Unix(),
-	}
-	app.RecordChann <- record
-}
-func (app *App) getSpiderName(userAgent string) string {
-	userAgent = strings.ToLower(userAgent)
-	for _, value := range app.Spider {
-		spider := strings.ToLower(value)
-		if strings.Contains(userAgent, spider) {
-			return spider
-		}
-	}
-	return ""
 }

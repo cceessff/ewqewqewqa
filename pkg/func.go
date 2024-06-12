@@ -3,11 +3,9 @@ package pkg
 import (
 	"bytes"
 	"context"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"math/rand"
 	"net"
 	"net/http"
@@ -45,14 +43,14 @@ func singleJoiningSlash(a, b string) string {
 	return a + b
 }
 func isIndexPage(u *url.URL) bool {
-	return (u.Path == "" ||
+	return u.Path == "" ||
 		strings.EqualFold(u.Path, "/") ||
 		strings.EqualFold(u.Path, "/index.php") ||
 		strings.EqualFold(u.Path, "/index.asp") ||
 		strings.EqualFold(u.Path, "/index.jsp") ||
 		strings.EqualFold(u.Path, "/index.htm") ||
 		strings.EqualFold(u.Path, "/index.html") ||
-		strings.EqualFold(u.Path, "/index.shtml"))
+		strings.EqualFold(u.Path, "/index.shtml")
 
 }
 func GBk2UTF8(content []byte, contentType string) []byte {
@@ -110,11 +108,11 @@ func newProxy(target *url.URL, ipList []net.IP) *httputil.ReverseProxy {
 }
 func GetIPList() ([]net.IP, error) {
 	ipList := make([]net.IP, 0)
-	addrs, err := net.InterfaceAddrs()
+	addresses, err := net.InterfaceAddrs()
 	if err != nil {
 		return ipList, err
 	}
-	for _, address := range addrs {
+	for _, address := range addresses {
 		// 检查ip地址判断是否回环地址
 		ipNet, ok := address.(*net.IPNet)
 		if ok && !ipNet.IP.IsLoopback() && ipNet.IP.To4() != nil && isPublicIP(ipNet.IP) {
@@ -167,7 +165,7 @@ func RandStr(minLength int, maxLength int) string {
 }
 func readLinks() map[string][]string {
 	result := make(map[string][]string)
-	linkData, err := ioutil.ReadFile("config/links.txt")
+	linkData, err := os.ReadFile("config/links.txt")
 	if err != nil && len(linkData) <= 0 {
 		return result
 	}
@@ -184,7 +182,7 @@ func readLinks() map[string][]string {
 
 func ParseAppConfig() (AppConfig, error) {
 	var appConfig AppConfig
-	data, err := ioutil.ReadFile("config/config.json")
+	data, err := os.ReadFile("config/config.json")
 	if err != nil {
 		return appConfig, err
 	}
@@ -194,12 +192,12 @@ func ParseAppConfig() (AppConfig, error) {
 		return appConfig, err
 	}
 	//关键字文件
-	keywordData, err := ioutil.ReadFile("config/keywords.txt")
+	keywordData, err := os.ReadFile("config/keywords.txt")
 	if err == nil && len(keywordData) > 0 {
 		appConfig.Keywords = strings.Split(strings.Replace(string(keywordData), "\r", "", -1), "\n")
 	}
 	//统计js
-	js, err := ioutil.ReadFile("config/inject.js")
+	js, err := os.ReadFile("config/inject.js")
 	if err == nil {
 		appConfig.InjectJs = string(js)
 	}
@@ -210,7 +208,7 @@ func ParseAppConfig() (AppConfig, error) {
 	return appConfig, nil
 }
 func adDomains() map[string]bool {
-	adDomainData, err := ioutil.ReadFile("config/ad_domains.txt")
+	adDomainData, err := os.ReadFile("config/ad_domains.txt")
 	adDomains := make(map[string]bool)
 	if err != nil || len(adDomainData) == 0 {
 		return adDomains
@@ -224,7 +222,7 @@ func adDomains() map[string]bool {
 }
 
 func GetExpireDate() (string, error) {
-	pubKye := `-----BEGIN PUBLIC KEY-----
+	pubKey := `-----BEGIN PUBLIC KEY-----
 MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAsfUtexjm9RVM5CpijrNF
 NDI4NfCyMIxW9q+/QaBXiNbqoguWYh1Mmkt+tal6QqObyvmufAbMfJpj0b+cGm96
 KYgAOXUntYAKkTvQLQoQQl9aGY/rxEPuVu+nvN0zsVHrDteaWpMu+7O6OyYS0aKL
@@ -234,19 +232,15 @@ XzFBxZbhjXaZkaO2CWTHLwcKtSCCd3PkXNCRWQeHM4OelRZJajKSxwcWWTqbusGC
 2wIDAQAB
 -----END PUBLIC KEY-----`
 
-	certBytes, err := ioutil.ReadFile("config/auth.cert")
+	certBytes, err := os.ReadFile("config/auth.cert")
 	if err != nil {
 		return "", err
 	}
-	hexData, err := gorsa.PublicDecrypt(string(certBytes), pubKye)
+	data, err := gorsa.PublicDecrypt(string(certBytes), pubKey)
 	if err != nil {
 		return "", errors.New("认证失败，无法解密," + err.Error())
 	}
-	data, err := hex.DecodeString(hexData)
-	if err != nil {
-		return "", errors.New("认证失败，无法解码," + err.Error())
-	}
-	return string(data), nil
+	return data, nil
 }
 func genUserAndPass() (string, string) {
 	chars := []rune("abcdefghijklmnopqrstuvwxyz")
@@ -262,10 +256,10 @@ func genUserAndPass() (string, string) {
 	return user, pass
 }
 func makeAdminUser() (string, string, error) {
-	passBytes, err := ioutil.ReadFile("config/passwd")
+	passBytes, err := os.ReadFile("config/passwd")
 	if err != nil || len(passBytes) == 0 {
 		userName, password := genUserAndPass()
-		err = ioutil.WriteFile("config/passwd", []byte(userName+":"+password), os.ModePerm)
+		err = os.WriteFile("config/passwd", []byte(userName+":"+password), os.ModePerm)
 		if err != nil {
 			return "", "", errors.New("生成用户文件错误" + err.Error())
 		}
@@ -298,8 +292,8 @@ func HtmlEntities(input string) string {
 }
 
 func IsDoubleSuffixDomain(host string) bool {
-	suffixs := []string{"com.cn", "net.cn", "org.cn"}
-	for _, suffix := range suffixs {
+	suffixes := []string{"com.cn", "net.cn", "org.cn"}
+	for _, suffix := range suffixes {
 		if strings.Contains(host, suffix) {
 			return true
 		}

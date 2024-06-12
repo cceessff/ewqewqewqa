@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
 	"log"
 	"math/rand"
 	"os"
@@ -36,7 +35,7 @@ func main() {
 			return
 		}
 		pid := fmt.Sprintf("%d", cmd.Process.Pid)
-		err = ioutil.WriteFile("pid", []byte(pid), os.ModePerm)
+		err = os.WriteFile("pid", []byte(pid), os.ModePerm)
 		if err != nil {
 			fmt.Println("写入pid文件错误", err.Error())
 			cmd.Process.Kill()
@@ -44,7 +43,7 @@ func main() {
 		}
 		fmt.Println("启动成功", pid)
 	case "stop":
-		data, err := ioutil.ReadFile("pid")
+		data, err := os.ReadFile("pid")
 		if err != nil {
 			fmt.Println("read pid error", err.Error())
 			return
@@ -76,12 +75,12 @@ func main() {
 
 func startCmd() {
 	rand.Seed(time.Now().UnixNano())
-	handler := handler.MustRotateFile("logs/mirror.log", rotatefile.EveryDay, func(c *handler.Config) {
+	handle := handler.MustRotateFile("logs/mirror.log", rotatefile.EveryDay, func(c *handler.Config) {
 		c.BackupNum = 2
 		c.Levels = slog.AllLevels
 		c.UseJSON = true
 	})
-	logger := slog.NewWithHandlers(handler)
+	logger := slog.NewWithHandlers(handle)
 	defer logger.Close()
 	err := pkg.InitTable()
 	if err != nil {
@@ -113,16 +112,15 @@ func startCmd() {
 	if err != nil {
 		logger.Error("GetIPList", err.Error())
 	}
-	app := pkg.App{
-		AppConfig:   &appConfig,
-		Dao:         dao,
-		S2T:         s2t,
-		IpList:      ipList,
-		Logger:      logger,
-		RecordChann: make(chan *pkg.Record, 500),
-		Finish:      make(chan int, 1),
+	app := &pkg.Application{
+		AppConfig: &appConfig,
+		Dao:       dao,
+		S2T:       s2t,
+		IpList:    ipList,
+		Logger:    logger,
 	}
 	for i := range siteConfigs {
+
 		err = app.MakeSite(siteConfigs[i])
 		if err != nil {
 			logger.Fatal("make Site", err.Error())
@@ -142,7 +140,6 @@ func startCmd() {
 
 	<-sigTERM
 	app.Stop()
-	<-app.Finish
 	logger.Info("exit")
 
 }

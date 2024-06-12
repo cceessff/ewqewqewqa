@@ -1,0 +1,5 @@
+[2024/04/23T00:36:18.137] [application] [ERROR] [main.go:87,startCmd] init table error unable to open database file: The system cannot find the path specified.  
+[2024/04/23T00:37:25.362] [application] [ERROR] [main.go:87,startCmd] init table error unable to open database file: The system cannot find the path specified.  
+[2024/04/23T00:37:32.536] [application] [ERROR] [main.go:87,startCmd] init table error unable to open database file: The system cannot find the path specified.  
+[2024/04/23T00:38:14.901] [application] [ERROR] [main.go:87,startCmd] init table error unable to open database file: The system cannot find the path specified.  
+[2024/04/23T00:40:42.988] [application] [ERROR] [main.go:87,startCmd] init table error unable to open database file: The system cannot find the path specified.  
